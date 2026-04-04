@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d[''''data''''][''''id'''']\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d[''''data''''][''''status''''], d[''''data''''][''''defaultDatasetId'''']\\)\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /PID 1456 /F)",
+      "Bash(cmd /c \"taskkill /PID 1456 /F\")",
+      "Bash(cmd /c \"taskkill /PID 1456 /F 2>&1\")",
+      "Bash(powershell -Command \"Stop-Process -Id 1456 -Force -ErrorAction SilentlyContinue; Get-Process | Where-Object { $_Id -eq 1456 }\")",
+      "Bash(node -e \":*)",
+      "Bash(pandoc \"C:/Users/Winner/Desktop/硅谷速递 \\(Glide fast Express\\) V1.0 .docx\" -o /tmp/svy_doc.md)",
+      "Read(//tmp/**)",
+      "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in \\(''netstat -ano ^| find \"\":3001\"\"''\\) do taskkill /PID %a /F\")",
+      "Bash(cmd /c \"taskkill /PID 30652 /F\")",
+      "Bash(wmic process:*)"
+    ]
+  }
+}
