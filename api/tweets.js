@@ -3,7 +3,7 @@
 const { getUserTweets } = require('../lib/tikhub');
 const { analyzeContent } = require('../lib/deepseek');
 const { getPrompts } = require('../lib/prompts');
-const presets = require('../server/config/presets');
+const presets = require('../lib/presets');
 
 // 内存缓存（Vercel 函数冷启动间不持久，热运行期间有效）
 let cache = null;
