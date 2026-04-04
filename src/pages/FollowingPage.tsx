@@ -8,7 +8,7 @@ import { Channel, Source } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '@/lib/apiBase';
 
 interface PresetSource {
   id: string;

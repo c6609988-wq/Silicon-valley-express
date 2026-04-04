@@ -18,7 +18,11 @@ const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      onClick={() => navigate(`/article/${article.id}`)}
+      onClick={() => {
+        // 将文章数据存入 sessionStorage，详情页读取（避免再次请求接口）
+        sessionStorage.setItem(`article_${article.id}`, JSON.stringify(article));
+        navigate(`/article/${article.id}`);
+      }}
     >
       {/* 来源信息 */}
       <div className="flex items-center justify-between mb-2">

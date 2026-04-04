@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+import { API_BASE } from '@/lib/apiBase';
+const SERVER_URL = API_BASE;
 
 export function useTwitterDigest() {
   const [tweets, setTweets] = useState<any[]>([]);

@@ -17,7 +17,8 @@ import { Button } from '@/components/ui/button';
 import { getSourceIcon, getSourceName } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+import { API_BASE } from '@/lib/apiBase';
+const SERVER_URL = API_BASE;
 
 const ArticleDetailPage = () => {
   const { id } = useParams();
@@ -32,19 +33,43 @@ const ArticleDetailPage = () => {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    fetch(`${SERVER_URL}/api/articles/${id}`)
-      .then(r => {
-        if (!r.ok) throw new Error('文章未找到');
-        return r.json();
-      })
+
+    // 优先从 sessionStorage 读取（由 ArticleCard 点击时存入）
+    const cached = sessionStorage.getItem(`article_${id}`);
+    if (cached) {
+      try {
+        setArticle(JSON.parse(cached));
+        setLoading(false);
+        return;
+      } catch (e) { /* 解析失败则走接口 */ }
+    }
+
+    // fallback：从接口获取
+    fetch(`${SERVER_URL}/api/content?source_id=${id}&limit=1`)
+      .then(r => { if (!r.ok) throw new Error('文章未找到'); return r.json(); })
       .then(data => {
-        setArticle(data);
+        const item = data.items?.[0];
+        if (!item) throw new Error('文章未找到');
+        setArticle({
+          id: item.external_id || item.id,
+          title: item.title || item.author_name,
+          summary: item.ai_analysis?.slice(0, 100) || '',
+          content: item.translated_content || item.ai_analysis || '',
+          originalContent: item.original_content || '',
+          sourceName: item.author_name,
+          sourceHandle: item.author_handle,
+          sourceType: item.platform,
+          sourceIcon: item.platform === 'x' ? '𝕏' : item.platform === 'youtube' ? '▶️' : '📰',
+          publishTime: item.published_at,
+          readTime: Math.max(1, Math.ceil((item.ai_analysis || '').length / 400)),
+          isBookmarked: false,
+          url: item.link || '#',
+          aiSummary: item.ai_analysis?.slice(0, 200) || '',
+          chapters: [],
+        });
         setLoading(false);
       })
-      .catch(e => {
-        setError(e.message);
-        setLoading(false);
-      });
+      .catch(e => { setError(e.message); setLoading(false); });
   }, [id]);
 
   const handleBookmark = () => {

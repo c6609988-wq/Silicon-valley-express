@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { mockChannels } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
 
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '@/lib/apiBase';
 
 const platformOptions = [
   { id: 'twitter', name: 'Twitter / X', icon: '𝕏', placeholder: 'https://x.com/username' },

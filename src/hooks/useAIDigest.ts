@@ -50,7 +50,8 @@ export interface AuthorDigest {
   content: string;
 }
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+import { API_BASE } from '@/lib/apiBase';
+const SERVER_URL = API_BASE;
 
 export function useAIDigest(tweets: any[]) {
   const [digests, setDigests] = useState<AuthorDigest[]>([]);

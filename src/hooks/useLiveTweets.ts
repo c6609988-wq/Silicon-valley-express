@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Article } from '@/types';
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+// 生产环境（Vercel）用相对路径，本地开发用 localhost:3001
+const API_BASE = import.meta.env.VITE_SERVER_URL
+  || (import.meta.env.DEV ? 'http://localhost:3001' : '');
 
 export function useLiveTweets(count = 6) {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -13,7 +15,12 @@ export function useLiveTweets(count = 6) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${SERVER_URL}/api/tweets/latest?count=${count}`);
+        // 本地：/api/tweets/latest（Express server）
+        // 生产：/api/tweets（Vercel Serverless）
+        const endpoint = import.meta.env.DEV
+          ? `${API_BASE}/api/tweets/latest?count=${count}`
+          : `/api/tweets?count=${count}`;
+        const res = await fetch(endpoint);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         setArticles(data.tweets || []);

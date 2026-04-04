@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '@/lib/apiBase';
 
 const pushTimes = ['07:00', '08:00', '09:00', '10:00', '12:00', '18:00', '20:00', '21:00'];
 const themeOptions = [
