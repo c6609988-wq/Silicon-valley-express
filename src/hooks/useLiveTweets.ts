@@ -4,7 +4,32 @@ import { Article } from '@/types';
 const API_BASE = import.meta.env.VITE_SERVER_URL
   || (import.meta.env.DEV ? 'http://localhost:3001' : '');
 
-export function useLiveTweets(count = 6) {
+// 每页100条，最多加载5页（500条），满足长期历史积累需求
+const MAX_PAGES = 5;
+
+async function fetchAllArticles(): Promise<Article[]> {
+  const allArticles: Article[] = [];
+
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const url = import.meta.env.DEV
+      ? `${API_BASE}/api/tweets/latest?count=100&page=${page}`
+      : `/api/content?format=articles&limit=100&page=${page}`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    const items: Article[] = data.articles || data.tweets || [];
+    allArticles.push(...items);
+
+    // 如果这页不满100条，说明已经到底了
+    if (items.length < 100) break;
+  }
+
+  return allArticles;
+}
+
+export function useLiveTweets(_count = 6) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -14,27 +39,8 @@ export function useLiveTweets(count = 6) {
       setLoading(true);
       setError(null);
       try {
-        // 生产环境：从 Supabase 读取所有历史文章
-        // 本地开发：从 Express server 的 /api/tweets/latest
-        if (import.meta.env.DEV) {
-          const res = await fetch(`${API_BASE}/api/tweets/latest?count=${count}`);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          setArticles(data.tweets || []);
-        } else {
-          const res = await fetch(`/api/content?format=articles&limit=100`);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          // 若数据库为空，回退到实时抓取
-          if (data.articles && data.articles.length > 0) {
-            setArticles(data.articles);
-          } else {
-            const res2 = await fetch(`/api/tweets?count=${count}`);
-            if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
-            const data2 = await res2.json();
-            setArticles(data2.tweets || []);
-          }
-        }
+        const items = await fetchAllArticles();
+        setArticles(items);
       } catch (e: any) {
         setError(e.message);
       } finally {
@@ -42,7 +48,7 @@ export function useLiveTweets(count = 6) {
       }
     }
     fetch_();
-  }, [count]);
+  }, []);
 
   return { articles, loading, error };
 }
