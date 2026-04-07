@@ -186,7 +186,7 @@ function parseLongAnalysis(aiText, source) {
   const summary = rawSummary.replace(/[#*]/g, '').slice(0, 120);
 
   // 朋克张思考
-  const punkMatch = aiText.match(/四[、.]\s*朋克张[^#\n]*思考([\s\S]*?)(?=###\s*五|五[、.]|信息来源|📎|$)/);
+  const punkMatch = aiText.match(/四[、.]\s*(?:朋克张[^#\n]*思考|智能点评)([\s\S]*?)(?=###\s*五|五[、.]|信息来源|📎|$)/);
   const aiComment = punkMatch ? punkMatch[1].trim().slice(0, 500) : '';
 
   return {
