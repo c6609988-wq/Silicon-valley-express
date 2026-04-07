@@ -13,7 +13,8 @@
     "api/cron/fetch.js": { "maxDuration": 300 },
     "api/tweets.js": { "maxDuration": 120 },
     "api/sources.js": { "maxDuration": 120 },
-    "api/seed.js": { "maxDuration": 30 }
+    "api/seed.js": { "maxDuration": 30 },
+    "api/push-feishu.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }

@@ -35,12 +35,22 @@ module.exports = async (req, res) => {
       .order('fetched_at', { ascending: false })
       .limit(3);
 
-    // Step 3: 推送飞书
-    if (todayArticles && todayArticles.length > 0) {
-      console.log(`[Cron] 推送 ${todayArticles.length} 条文章到飞书...`);
-      await pushDailyDigest(todayArticles);
+    // Step 3: 推送飞书（有新文章用新文章，否则取最近3条历史文章兜底）
+    let articlesToPush = todayArticles && todayArticles.length > 0 ? todayArticles : null;
+    if (!articlesToPush) {
+      const { data: latestArticles } = await supabase
+        .from('articles')
+        .select('*')
+        .order('fetched_at', { ascending: false })
+        .limit(3);
+      articlesToPush = latestArticles && latestArticles.length > 0 ? latestArticles : null;
+    }
+
+    if (articlesToPush) {
+      console.log(`[Cron] 推送 ${articlesToPush.length} 条文章到飞书...`);
+      await pushDailyDigest(articlesToPush);
     } else {
-      console.log('[Cron] 今日无新文章，跳过飞书推送');
+      console.log('[Cron] 数据库无文章，跳过飞书推送');
     }
 
     res.json({
