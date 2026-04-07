@@ -92,7 +92,7 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
                 </button>
               </div>
 
-              <div className="flex-1 space-y-3 overflow-y-auto">
+              <div className="flex-1 space-y-3 overflow-y-auto pb-2" style={{ minHeight: 0 }}>
                 {mockChannels.map((channel) => (
                   <motion.button
                     key={channel.id}
@@ -118,13 +118,14 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
                 ))}
               </div>
 
-              <Button
-                onClick={() => onComplete(selectedChannels)}
-                className="w-full h-12 rounded-xl text-base mt-4"
-                disabled={selectedChannels.length === 0}
-              >
-                关注 {selectedChannels.length} 个频道
-              </Button>
+              <div className="pt-4 pb-2 bg-background">
+                <Button
+                  onClick={() => onComplete(selectedChannels)}
+                  className="w-full h-12 rounded-xl text-base"
+                >
+                  {selectedChannels.length > 0 ? `关注 ${selectedChannels.length} 个频道，进入首页` : '直接进入首页'}
+                </Button>
+              </div>
             </motion.div>
           )}
         </div>
