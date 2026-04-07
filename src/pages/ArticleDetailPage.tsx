@@ -20,6 +20,42 @@ import { useToast } from '@/hooks/use-toast';
 import { API_BASE } from '@/lib/apiBase';
 const SERVER_URL = API_BASE;
 
+// 从 AI 分析全文中只提取中文翻译部分
+// 移除：一、核心要点 / 二、划重点 / 三、原文翻译 标题 / 原文英文行
+function extractChineseTranslationOnly(content: string): string {
+  // 找到"三、原文翻译"之后的部分
+  const sectionMatch = content.match(/(?:###\s*)?三[、.]\s*原文翻译([\s\S]*)/);
+  if (!sectionMatch) return content;
+
+  const section = sectionMatch[1];
+  const results: string[] = [];
+
+  // 按 --- 分割每条推文块
+  const blocks = section.split(/\n[-─]{2,}\n?/);
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const translationLines: string[] = [];
+    let inTranslation = false;
+
+    for (const line of lines) {
+      const t = line.trim();
+      if (/^翻译[：:]/.test(t)) {
+        inTranslation = true;
+        translationLines.push(t.replace(/^翻译[：:]/, '').trim());
+      } else if (/^原文[：:]/.test(t) || /^「/.test(t) || /^\[/.test(t)) {
+        inTranslation = false;
+      } else if (inTranslation && t) {
+        translationLines.push(line);
+      }
+    }
+
+    const text = translationLines.join('\n').trim();
+    if (text) results.push(text);
+  }
+
+  return results.join('\n\n') || content;
+}
+
 const ArticleDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -266,7 +302,9 @@ const ArticleDetailPage = () => {
 
         <div className="bg-secondary rounded-2xl p-5">
           <p className="text-[15px] text-foreground/80 leading-relaxed whitespace-pre-line">
-            {showChinese ? article.content : (article.originalContent || article.content)}
+            {showChinese
+              ? extractChineseTranslationOnly(article.content)
+              : (article.originalContent || article.content)}
           </p>
         </div>
       </div>
