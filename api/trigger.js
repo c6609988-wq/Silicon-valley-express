@@ -20,24 +20,39 @@ module.exports = async (req, res) => {
   const bjTime = bjNow.toISOString().replace('T', ' ').slice(0, 19);
   const yesterdayBJ = new Date(bjNow - 86400000).toISOString().slice(0, 10);
 
-  // ── test-ai 模式：最简单的 DeepSeek 连通性测试 ──────────────────────────
+  // ── test-ai 模式：诊断AI连通性（强制用 deepseek-chat，忽略env里可能错误的模型名）
   if (mode === 'test-ai') {
     const axios = require('axios');
     const key = process.env.DEEPSEEK_API_KEY;
-    const baseURL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1';
-    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+    const orKey = process.env.OPENROUTER_API_KEY;
+    const envBaseURL = process.env.DEEPSEEK_BASE_URL || '';
+    const envModel = process.env.DEEPSEEK_MODEL || '';
+
+    // 强制 deepseek-chat，不使用 env 里可能有问题的模型名
+    const baseURL = 'https://api.deepseek.com';
+    const model = 'deepseek-chat';
+
+    const diag = {
+      env_DEEPSEEK_BASE_URL: envBaseURL || '(not set)',
+      env_DEEPSEEK_MODEL: envModel || '(not set)',
+      env_DEEPSEEK_API_KEY: key ? key.slice(0, 8) + '...' : '(not set)',
+      env_OPENROUTER_API_KEY: orKey ? orKey.slice(0, 8) + '...' : '(not set)',
+      using_baseURL: baseURL,
+      using_model: model,
+    };
+
     try {
       const r = await axios.post(`${baseURL}/chat/completions`, {
         model,
-        messages: [{ role: 'user', content: '请用中文说：你好' }],
+        messages: [{ role: 'user', content: '你好' }],
         max_tokens: 20,
       }, {
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         timeout: 20000,
       });
-      return res.json({ ok: true, model, reply: r.data?.choices?.[0]?.message?.content, key_prefix: key?.slice(0, 8) });
+      return res.json({ ok: true, reply: r.data?.choices?.[0]?.message?.content, diag });
     } catch (err) {
-      return res.json({ ok: false, status: err.response?.status, error: err.message, body: err.response?.data, key_prefix: key?.slice(0, 8), baseURL, model });
+      return res.json({ ok: false, status: err.response?.status, error: err.message, body: err.response?.data, diag });
     }
   }
 
