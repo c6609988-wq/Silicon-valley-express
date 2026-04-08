@@ -20,6 +20,27 @@ module.exports = async (req, res) => {
   const bjTime = bjNow.toISOString().replace('T', ' ').slice(0, 19);
   const yesterdayBJ = new Date(bjNow - 86400000).toISOString().slice(0, 10);
 
+  // ── test-ai 模式：最简单的 DeepSeek 连通性测试 ──────────────────────────
+  if (mode === 'test-ai') {
+    const axios = require('axios');
+    const key = process.env.DEEPSEEK_API_KEY;
+    const baseURL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1';
+    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+    try {
+      const r = await axios.post(`${baseURL}/chat/completions`, {
+        model,
+        messages: [{ role: 'user', content: '请用中文说：你好' }],
+        max_tokens: 20,
+      }, {
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        timeout: 20000,
+      });
+      return res.json({ ok: true, model, reply: r.data?.choices?.[0]?.message?.content, key_prefix: key?.slice(0, 8) });
+    } catch (err) {
+      return res.json({ ok: false, status: err.response?.status, error: err.message, body: err.response?.data, key_prefix: key?.slice(0, 8) });
+    }
+  }
+
   // ── reprocess 模式：对无 AI 分析的历史数据补跑 DeepSeek ───────────────────
   if (mode === 'reprocess') {
     try {
