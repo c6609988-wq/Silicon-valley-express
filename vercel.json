@@ -21,7 +21,8 @@
     "api/push-feishu.js": { "maxDuration": 30 },
     "api/trigger.js": { "maxDuration": 300 },
     "api/health.js": { "maxDuration": 10 },
-    "api/debug-crawler.js": { "maxDuration": 60 }
+    "api/debug-crawler.js": { "maxDuration": 60 },
+    "api/debug-deepseek.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
