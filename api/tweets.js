@@ -82,23 +82,35 @@ function dbRowToArticle(item) {
     ? parseShortAnalysis(aiText, { name: item.author_name, handle: item.author_handle })
     : null;
 
-  // 标题：优先用 AI 解析出的标题，其次用 DB 里的 title
+  // 标题：优先用 AI 解析出的标题（非"今日动态"占位），其次 DB 里的 title
   const title = (parsed?.title && !parsed.title.endsWith('今日动态'))
     ? parsed.title
     : (item.title || item.author_name || '');
 
-  // 中文翻译内容：优先用独立的 translated_content（不等于原文时），其次 AI 解析
+  // 中文内容：优先用 translated_content（真实翻译），其次 AI 解析出的翻译段，最后原文
   const originalContent = item.original_content || '';
   const translatedRaw = item.translated_content || '';
-  const hasRealTranslation = translatedRaw && translatedRaw !== originalContent;
+  const hasRealTranslation = translatedRaw && translatedRaw !== originalContent && translatedRaw.length > 10;
   const content = hasRealTranslation
     ? translatedRaw
     : (parsed?.chineseContent || translatedRaw || originalContent);
 
+  // AI 点评：优先 parsed.aiComment（从"二、划重点"提取），回退直接取 ai_analysis 全文
+  const aiComment = parsed?.aiComment || raw.aiComment
+    || (aiText.length > 50 ? aiText.replace(/###\s*[一二三四五][、.][^\n]*/g, '').trim().slice(0, 300) : '');
+
+  // 摘要：前两句话
+  const summary = parsed?.summary || raw.summary
+    || aiComment.split(/(?<=[。！？])\s*/).slice(0, 2).join('').slice(0, 150)
+    || title;
+
+  // 章节：优先 parsed.chapters，其次 raw.chapters
+  const chapters = parsed?.chapters?.length ? parsed.chapters : (raw.chapters || []);
+
   return {
     id: item.external_id || item.id,
     title,
-    summary: parsed?.summary || raw.summary || aiText.slice(0, 150) || '',
+    summary,
     content,
     originalContent,
     sourceName: item.author_name,
@@ -110,9 +122,9 @@ function dbRowToArticle(item) {
     isBookmarked: false,
     url: item.link || (item.author_handle ? `https://x.com/${item.author_handle.replace('@', '')}` : '#'),
     score: raw.score || 0,
-    aiSummary: parsed?.aiComment || raw.aiComment || '',
-    aiComment: parsed?.aiComment || raw.aiComment || '',
-    chapters: parsed?.chapters?.length ? parsed.chapters : (raw.chapters || []),
+    aiSummary: aiComment,
+    aiComment,
+    chapters,
   };
 }
 

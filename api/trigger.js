@@ -61,18 +61,19 @@ module.exports = async (req, res) => {
       const log = [];
       for (const article of emptyArticles) {
         try {
-          const content = article.original_content || '';
-          if (!content) { log.push(`跳过 ${article.external_id}：无原文`); continue; }
+          const content = (article.original_content || '').replace(/https?:\/\/t\.co\/\S+/g, '').trim();
+          // 内容太短（去掉链接后不足30字）跳过，避免 DeepSeek 400
+          if (!content || content.length < 30) { log.push(`跳过 ${article.external_id}：内容过短(${content.length}字)`); continue; }
 
           // 翻译
           let translated = content;
-          try { translated = await deepseek.translateToZh(content); } catch (e) { log.push(`翻译失败: ${e.message}`); }
+          try { translated = await deepseek.translateToZh(content); } catch (e) { log.push(`翻译失败(${e.response?.status || e.message}): ${JSON.stringify(e.response?.data || '')}`); }
 
           // AI 分析
           let analysis = '';
           const todayStr = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
           const inputText = `博主：${article.author_name} ${article.author_handle || ''}\n日期：${todayStr}\n原文：\n${content}\n\n翻译：\n${translated}`;
-          try { analysis = await deepseek.analyzeContent(prompts.SHORT_CONTENT_PROMPT, inputText); } catch (e) { log.push(`分析失败: ${e.message}`); }
+          try { analysis = await deepseek.analyzeContent(prompts.SHORT_CONTENT_PROMPT, inputText); } catch (e) { log.push(`分析失败(${e.response?.status || e.message}): ${JSON.stringify(e.response?.data || '')}`); }
 
           const { error } = await supabase.from('articles').update({
             translated_content: translated,
