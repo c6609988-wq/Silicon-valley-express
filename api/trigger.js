@@ -41,16 +41,21 @@ module.exports = async (req, res) => {
       using_model: model,
     };
 
+    const headers = { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
     try {
+      // 先列出可用模型
+      const modelsRes = await axios.get(`${baseURL}/models`, { headers, timeout: 10000 });
+      const models = (modelsRes.data?.data || []).map(m => m.id);
+      diag.available_models = models;
+
+      // 选第一个可用模型测试
+      const testModel = models[0] || model;
       const r = await axios.post(`${baseURL}/chat/completions`, {
-        model,
+        model: testModel,
         messages: [{ role: 'user', content: '你好' }],
         max_tokens: 20,
-      }, {
-        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        timeout: 20000,
-      });
-      return res.json({ ok: true, reply: r.data?.choices?.[0]?.message?.content, diag });
+      }, { headers, timeout: 20000 });
+      return res.json({ ok: true, used_model: testModel, reply: r.data?.choices?.[0]?.message?.content, diag });
     } catch (err) {
       return res.json({ ok: false, status: err.response?.status, error: err.message, body: err.response?.data, diag });
     }
