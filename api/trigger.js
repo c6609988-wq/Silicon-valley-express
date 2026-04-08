@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
       });
       return res.json({ ok: true, model, reply: r.data?.choices?.[0]?.message?.content, key_prefix: key?.slice(0, 8) });
     } catch (err) {
-      return res.json({ ok: false, status: err.response?.status, error: err.message, body: err.response?.data, key_prefix: key?.slice(0, 8) });
+      return res.json({ ok: false, status: err.response?.status, error: err.message, body: err.response?.data, key_prefix: key?.slice(0, 8), baseURL, model });
     }
   }
 
