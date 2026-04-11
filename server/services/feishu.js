@@ -56,8 +56,13 @@ async function pushDailyDigest(articles, userName = '同学') {
   // 每条新闻：左侧文字列 + 右侧缩略图列
   top3.forEach((article, i) => {
     const summary = article.aiSummary || article.summary || '';
-    const link = article.url
-      ? `\n<font color="blue">[查看详情 ›](${article.url})</font>`
+    // 优先跳转硅谷速递详情页，回退原文链接
+    const articleId = article.id || article.external_id;
+    const detailUrl = articleId
+      ? `https://silicon-valley-express.vercel.app/article/${articleId}`
+      : (article.url || '');
+    const link = detailUrl
+      ? `\n<font color="blue">[查看详情 ›](${detailUrl})</font>`
       : '';
 
     innerElements.push({
