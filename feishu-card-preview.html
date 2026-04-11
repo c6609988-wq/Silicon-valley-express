@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>飞书卡片预览 — 硅谷速递</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 20px;
+      font-family: -apple-system, "PingFang SC", "Hiragino Sans GB",
+        "Microsoft YaHei", sans-serif;
+    }
+
+    /* ── 整体卡片容器 ── */
+    .card {
+      max-width: 520px;
+      width: 100%;
+      background: #ebf2ff;
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: 0 2px 12px rgba(42, 91, 215, 0.10);
+    }
+
+    /* ── Header ── */
+    .card-header {
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-header .pin {
+      font-size: 18px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .card-header .title {
+      font-size: 17px;
+      font-weight: 600;
+      color: #2A5BD7;
+      letter-spacing: 0.3px;
+    }
+
+    /* ── 问候语 ── */
+    .card-greeting {
+      padding: 10px 16px 8px;
+      font-size: 14px;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    /* ── 内容子卡片 ── */
+    .card-section {
+      background: #FAFAFA;
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 4px;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #2A5BD7;
+      margin-bottom: 14px;
+      letter-spacing: 0.2px;
+    }
+
+    /* ── 条目列表 ── */
+    .item-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .item {
+      display: flex;
+      gap: 12px;
+      padding: 12px 0;
+      align-items: flex-start;
+    }
+
+    .item + .item {
+      border-top: 1px solid #C8DCFA;
+    }
+
+    /* 左侧文字区 */
+    .item-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .item-headline {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1a1a1a;
+      line-height: 1.5;
+      word-break: break-all;
+    }
+
+    .item-summary {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .item-link {
+      font-size: 13px;
+      color: #2A5BD7;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-weight: 500;
+    }
+
+    .item-link::after {
+      content: "›";
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    /* 右侧缩略图占位 */
+    .item-thumb {
+      flex-shrink: 0;
+      width: 72px;
+      height: 54px;
+      border-radius: 6px;
+      background: #dce9ff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: stretch;
+      padding: 8px 7px;
+      gap: 5px;
+      overflow: hidden;
+    }
+
+    .thumb-line {
+      height: 4px;
+      border-radius: 2px;
+      background: #a3bef5;
+    }
+
+    .thumb-line.short  { width: 60%; }
+    .thumb-line.medium { width: 85%; }
+    .thumb-line.long   { width: 100%; }
+    .thumb-line.dot    { width: 40%; }
+
+    /* ── 底部 Footer ── */
+    .card-footer {
+      padding: 10px 16px 4px;
+      font-size: 12px;
+      color: #8a9bbf;
+      text-align: right;
+      letter-spacing: 0.3px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+
+  <!-- Header -->
+  <div class="card-header">
+    <span class="pin">📌</span>
+    <span class="title">你的专属新闻速递 | 2026-04-11</span>
+  </div>
+
+  <!-- 问候语 -->
+  <p class="card-greeting">
+    Hi，Cloe 同学，根据你可能感兴趣的内容为你推荐：
+  </p>
+
+  <!-- 内容子卡片 -->
+  <div class="card-section">
+    <div class="section-title">✨ 今日精选</div>
+
+    <div class="item-list">
+
+      <!-- 条目 1 -->
+      <div class="item">
+        <div class="item-body">
+          <div class="item-headline">1. Google DeepMind 宣布 Gemma 4 模型开放使用</div>
+          <div class="item-summary">Google DeepMind 正式开放 Gemma 4 系列模型，支持多模态输入，最小版本仅 1B 参数，可在消费级设备本地运行，开发者可通过 Hugging Face 直接下载。</div>
+          <a class="item-link" href="#">查看详情</a>
+        </div>
+        <div class="item-thumb">
+          <div class="thumb-line long"></div>
+          <div class="thumb-line medium"></div>
+          <div class="thumb-line short"></div>
+          <div class="thumb-line long"></div>
+          <div class="thumb-line dot"></div>
+        </div>
+      </div>
+
+      <!-- 条目 2 -->
+      <div class="item">
+        <div class="item-body">
+          <div class="item-headline">2. OpenAI 内部文件泄露：GPT-5 训练成本超 5 亿美元</div>
+          <div class="item-summary">据路透社报道，OpenAI GPT-5 单次预训练成本已突破 5 亿美元，推理能力在 MATH 和 GPQA 基准上较 GPT-4o 提升超 30%，预计今年 Q2 向付费用户推送。</div>
+          <a class="item-link" href="#">查看详情</a>
+        </div>
+        <div class="item-thumb">
+          <div class="thumb-line medium"></div>
+          <div class="thumb-line long"></div>
+          <div class="thumb-line short"></div>
+          <div class="thumb-line long"></div>
+          <div class="thumb-line medium"></div>
+        </div>
+      </div>
+
+      <!-- 条目 3 -->
+      <div class="item">
+        <div class="item-body">
+          <div class="item-headline">3. Anthropic 完成 35 亿美元新一轮融资，估值达 615 亿美元</div>
+          <div class="item-summary">Anthropic 宣布完成由 Amazon 领投的 35 亿美元 D 轮融资，估值升至 615 亿美元。资金将主要用于扩大 Claude 模型算力基础设施及企业级 API 服务。</div>
+          <a class="item-link" href="#">查看详情</a>
+        </div>
+        <div class="item-thumb">
+          <div class="thumb-line short"></div>
+          <div class="thumb-line long"></div>
+          <div class="thumb-line medium"></div>
+          <div class="thumb-line dot"></div>
+          <div class="thumb-line long"></div>
+        </div>
+      </div>
+
+    </div><!-- /item-list -->
+  </div><!-- /card-section -->
+
+  <!-- Footer -->
+  <div class="card-footer">由 硅谷速递 · AI 自动精选 提供</div>
+
+</div><!-- /card -->
+
+</body>
+</html>
