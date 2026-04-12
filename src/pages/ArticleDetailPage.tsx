@@ -6,54 +6,60 @@ import {
   ExternalLink,
   Bookmark,
   Share2,
-  Sparkles,
-  List,
-  MessageCircle,
-  Languages,
   Loader2,
+  Languages,
 } from 'lucide-react';
 import { Article } from '@/types';
 import { Button } from '@/components/ui/button';
 import { getSourceIcon, getSourceName } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
-
 import { API_BASE } from '@/lib/apiBase';
+
 const SERVER_URL = API_BASE;
 
-// 从 AI 分析全文中只提取中文翻译部分
-// 移除：一、核心要点 / 二、划重点 / 三、原文翻译 标题 / 原文英文行
-function extractChineseTranslationOnly(content: string): string {
-  // 找到"三、原文翻译"之后的部分
-  const sectionMatch = content.match(/(?:###\s*)?三[、.]\s*原文翻译([\s\S]*)/);
-  if (!sectionMatch) return content;
+// ── 从 AI 分析文本中解析结构化字段 ─────────────────────────────
+function parseAIAnalysis(aiText: string) {
+  // 一句话摘要：优先取"划重点"第一句，否则取全文第一句
+  const commentMatch = aiText.match(/二[、.]\s*划重点[\s\S]*?\n([\s\S]*?)(?=###\s*三|三[、.]|$)/);
+  const commentRaw = commentMatch ? commentMatch[1].trim().replace(/\*\*/g, '') : '';
+  const oneLiner = commentRaw.split(/[。！？\n]/)[0].trim() || aiText.slice(0, 60).replace(/\*\*/g, '');
 
-  const section = sectionMatch[1];
-  const results: string[] = [];
+  // 核心要点列表
+  const keypointsMatch = aiText.match(/一[、.]\s*今日核心要点[\s\S]*?\n([\s\S]*?)(?=###\s*二|二[、.])/);
+  const keypointsRaw = keypointsMatch ? keypointsMatch[1].trim() : '';
+  const keyPoints = keypointsRaw
+    .split('\n')
+    .filter(l => /^\d+[.)、]/.test(l.trim()))
+    .map(l => l.replace(/^\d+[.)、]\s*/, '').replace(/\*\*/g, '').trim())
+    .filter(Boolean);
 
-  // 按 --- 分割每条推文块
-  const blocks = section.split(/\n[-─]{2,}\n?/);
-  for (const block of blocks) {
-    const lines = block.split('\n');
-    const translationLines: string[] = [];
-    let inTranslation = false;
+  // 划重点正文
+  const comment = commentRaw;
 
-    for (const line of lines) {
-      const t = line.trim();
-      if (/^翻译[：:]/.test(t)) {
-        inTranslation = true;
-        translationLines.push(t.replace(/^翻译[：:]/, '').trim());
-      } else if (/^原文[：:]/.test(t) || /^「/.test(t) || /^\[/.test(t)) {
-        inTranslation = false;
-      } else if (inTranslation && t) {
-        translationLines.push(line);
+  // 中文翻译部分
+  const translationMatch = aiText.match(/三[、.]\s*原文翻译([\s\S]*)/);
+  let chineseTranslation = '';
+  if (translationMatch) {
+    const section = translationMatch[1];
+    const results: string[] = [];
+    const blocks = section.split(/\n[-─]{2,}\n?/);
+    for (const block of blocks) {
+      const lines = block.split('\n');
+      const buf: string[] = [];
+      let inTrans = false;
+      for (const line of lines) {
+        const t = line.trim();
+        if (/^翻译[：:]/.test(t)) { inTrans = true; buf.push(t.replace(/^翻译[：:]/, '').trim()); }
+        else if (/^原文[：:]/.test(t) || /^「/.test(t) || /^\[/.test(t)) { inTrans = false; }
+        else if (inTrans && t) { buf.push(line); }
       }
+      const text = buf.join('\n').trim();
+      if (text) results.push(text);
     }
-
-    const text = translationLines.join('\n').trim();
-    if (text) results.push(text);
+    chineseTranslation = results.join('\n\n');
   }
 
-  return results.join('\n\n') || content;
+  return { oneLiner, keyPoints, comment, chineseTranslation };
 }
 
 const ArticleDetailPage = () => {
@@ -70,17 +76,11 @@ const ArticleDetailPage = () => {
     if (!id) return;
     setLoading(true);
 
-    // 优先从 sessionStorage 读取（由 ArticleCard 点击时存入）
     const cached = sessionStorage.getItem(`article_${id}`);
     if (cached) {
-      try {
-        setArticle(JSON.parse(cached));
-        setLoading(false);
-        return;
-      } catch (e) { /* 解析失败则走接口 */ }
+      try { setArticle(JSON.parse(cached)); setLoading(false); return; } catch {}
     }
 
-    // fallback：从接口获取
     fetch(`${SERVER_URL}/api/content?source_id=${id}&limit=1`)
       .then(r => { if (!r.ok) throw new Error('文章未找到'); return r.json(); })
       .then(data => {
@@ -100,7 +100,8 @@ const ArticleDetailPage = () => {
           readTime: Math.max(1, Math.ceil((item.ai_analysis || '').length / 400)),
           isBookmarked: false,
           url: item.link || '#',
-          aiSummary: item.ai_analysis?.slice(0, 200) || '',
+          aiSummary: item.ai_analysis || '',
+          aiComment: item.ai_analysis || '',
           chapters: [],
         });
         setLoading(false);
@@ -110,11 +111,7 @@ const ArticleDetailPage = () => {
 
   const handleBookmark = () => {
     setIsBookmarked(!isBookmarked);
-    toast({
-      title: isBookmarked ? '已取消收藏' : '已收藏',
-      description: isBookmarked ? '文章已从收藏中移除' : '可在「我的收藏」中查看',
-      duration: 1000,
-    });
+    toast({ title: isBookmarked ? '已取消收藏' : '已收藏', duration: 1000 });
   };
 
   const handleShare = () => {
@@ -122,39 +119,44 @@ const ArticleDetailPage = () => {
       navigator.share({ title: article.title, url: article.url });
     } else {
       navigator.clipboard.writeText(window.location.href);
-      toast({ title: '链接已复制', description: '可以分享给朋友了' });
+      toast({ title: '链接已复制' });
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center max-w-[430px] mx-auto">
-        <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto" />
-          <p className="text-sm text-muted-foreground">AI 正在加载分析结果…</p>
-        </div>
+  if (loading) return (
+    <div className="min-h-screen bg-background flex items-center justify-center max-w-[430px] mx-auto">
+      <div className="text-center space-y-3">
+        <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto" />
+        <p className="text-sm text-muted-foreground">加载中…</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (error || !article) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center max-w-[430px] mx-auto">
-        <div className="text-center">
-          <p className="text-muted-foreground">{error || '文章未找到'}</p>
-          <Button variant="ghost" onClick={() => navigate('/')} className="mt-4">
-            返回首页
-          </Button>
-        </div>
+  if (error || !article) return (
+    <div className="min-h-screen bg-background flex items-center justify-center max-w-[430px] mx-auto">
+      <div className="text-center">
+        <p className="text-muted-foreground">{error || '文章未找到'}</p>
+        <Button variant="ghost" onClick={() => navigate('/')} className="mt-4">返回首页</Button>
       </div>
-    );
-  }
+    </div>
+  );
+
+  // 解析 AI 分析内容
+  const aiRaw = article.aiComment || article.aiSummary || '';
+  const { oneLiner, keyPoints, comment, chineseTranslation } = parseAIAnalysis(aiRaw);
+
+  // 摘要回退：用 article.summary
+  const summaryText = oneLiner || article.summary || '';
+
+  // 中文内容回退
+  const chineseContent = chineseTranslation || article.content || '';
 
   const publishDate = new Date(article.publishTime);
   const dateStr = `${publishDate.getMonth() + 1}月${publishDate.getDate()}日`;
 
   return (
     <div className="min-h-screen bg-background max-w-[430px] mx-auto">
+
       {/* 顶部导航 */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md">
         <div className="flex items-center justify-between px-4 py-3">
@@ -163,9 +165,7 @@ const ArticleDetailPage = () => {
           </motion.button>
           <div className="flex items-center gap-3">
             <motion.button onClick={handleBookmark} whileTap={{ scale: 0.95 }}>
-              <Bookmark
-                className={`w-6 h-6 ${isBookmarked ? 'text-amber-400 fill-amber-400' : 'text-foreground'}`}
-              />
+              <Bookmark className={`w-6 h-6 ${isBookmarked ? 'text-amber-400 fill-amber-400' : 'text-foreground'}`} />
             </motion.button>
             <motion.button onClick={handleShare} whileTap={{ scale: 0.95 }}>
               <Share2 className="w-6 h-6 text-foreground" />
@@ -174,15 +174,11 @@ const ArticleDetailPage = () => {
         </div>
       </div>
 
-      {/* 来源与日期 */}
-      <div className="px-4 pt-2 pb-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm">{getSourceIcon(article.sourceType)}</span>
-          <span className="text-sm text-primary font-medium">
-            {getSourceName(article.sourceType)}
-          </span>
-          <span className="text-sm text-muted-foreground">{dateStr}</span>
-        </div>
+      {/* 来源 + 日期 */}
+      <div className="px-4 pt-2 pb-1 flex items-center gap-2">
+        <span className="text-sm">{getSourceIcon(article.sourceType)}</span>
+        <span className="text-sm text-primary font-medium">{getSourceName(article.sourceType)}</span>
+        <span className="text-sm text-muted-foreground">{dateStr}</span>
       </div>
 
       {/* 标题 */}
@@ -190,7 +186,7 @@ const ArticleDetailPage = () => {
         <h1 className="text-[22px] font-bold text-foreground leading-tight">{article.title}</h1>
       </div>
 
-      {/* 作者信息 */}
+      {/* 作者 */}
       <div className="px-4 pb-4 flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg">
           {article.sourceIcon}
@@ -205,61 +201,70 @@ const ArticleDetailPage = () => {
 
       <div className="border-t border-border mx-4" />
 
-      {/* AI 智能总结 */}
-      <div className="px-4 py-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="w-5 h-5 text-primary" />
-          <h2 className="text-base font-bold text-foreground">AI 智能总结</h2>
+      {/* ── 栏目一：✨ 一句话摘要 ─────────────────────────── */}
+      {summaryText && (
+        <div className="px-4 py-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">✨</span>
+            <h2 className="text-base font-bold text-foreground">一句话摘要</h2>
+          </div>
+          <div className="bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3">
+            <p className="text-[15px] text-foreground leading-relaxed">{summaryText}</p>
+          </div>
         </div>
+      )}
 
-        {/* 核心要点 */}
-        {article.chapters && article.chapters.length > 0 && (
-          <div className="mb-5">
-            <div className="flex items-center gap-1.5 mb-3">
-              <List className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold text-primary">核心要点</span>
-            </div>
-            <div className="space-y-3">
-              {article.chapters.flatMap(ch => ch.keyPoints || []).map((point, i) => {
-                const clean = point.replace(/\*\*/g, '');
-                const colonIndex = clean.indexOf('：');
-                const label = colonIndex !== -1 ? clean.slice(0, colonIndex + 1) : clean;
-                const detail = colonIndex !== -1 ? clean.slice(colonIndex + 1) : '';
-                const detailParts = detail.split(/(\d[\d,.%+\-]*)/g);
+      {(keyPoints.length > 0 || comment) && <div className="border-t border-border mx-4" />}
+
+      {/* ── 栏目二：🎯 智能总结 ──────────────────────────── */}
+      {(keyPoints.length > 0 || comment) && (
+        <div className="px-4 py-5">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-lg">🎯</span>
+            <h2 className="text-base font-bold text-foreground">智能总结</h2>
+          </div>
+
+          {/* 核心要点 */}
+          {keyPoints.length > 0 && (
+            <div className="space-y-3 mb-4">
+              {keyPoints.map((point, i) => {
+                const colonIdx = point.indexOf('：');
+                const label = colonIdx !== -1 ? point.slice(0, colonIdx + 1) : '';
+                const detail = colonIdx !== -1 ? point.slice(colonIdx + 1) : point;
                 return (
-                  <div key={i} className="flex items-start gap-2.5">
-                    <span className="text-primary text-sm mt-0.5">●</span>
-                    <span className="text-[15px] text-foreground leading-relaxed">
-                      <span className="font-medium">{label}</span>
-                      {detailParts.map((part, j) =>
-                        /\d/.test(part) ? <strong key={j}>{part}</strong> : part
-                      )}
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="mt-1 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0">
+                      {i + 1}
                     </span>
+                    <p className="text-[14px] text-foreground leading-relaxed">
+                      {label && <span className="font-semibold">{label}</span>}
+                      {detail}
+                    </p>
                   </div>
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 划重点 */}
-        {article.aiComment && (
-          <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4">
-            <div className="flex items-center gap-1.5 mb-2">
-              <MessageCircle className="w-4 h-4 text-purple-500" />
-              <span className="text-sm font-semibold text-purple-500">划重点</span>
+          {/* 划重点 */}
+          {comment && (
+            <div className="bg-amber-50 border border-amber-200/60 rounded-2xl px-4 py-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-sm">💡</span>
+                <span className="text-sm font-semibold text-amber-700">划重点</span>
+              </div>
+              <p className="text-[14px] text-foreground/80 leading-relaxed whitespace-pre-line">
+                {comment}
+              </p>
             </div>
-            <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-              {article.aiComment?.replace(/\*\*/g, '')}
-            </p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div className="border-t border-border mx-4" />
 
-      {/* 原文内容 */}
-      <div className="px-4 py-5 pb-10">
+      {/* ── 栏目三：原文内容 ────────────────────────────── */}
+      <div className="px-4 py-5 pb-12">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <span className="text-lg">{getSourceIcon(article.sourceType)}</span>
@@ -275,14 +280,12 @@ const ArticleDetailPage = () => {
           </motion.button>
         </div>
 
-        {/* 中文翻译 / 原文切换 */}
+        {/* 中文 / 原文切换 */}
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setShowChinese(true)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              showChinese
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-muted-foreground'
+              showChinese ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
             }`}
           >
             <Languages className="w-4 h-4" />
@@ -291,9 +294,7 @@ const ArticleDetailPage = () => {
           <button
             onClick={() => setShowChinese(false)}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              !showChinese
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-muted-foreground'
+              !showChinese ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
             }`}
           >
             原文
@@ -302,9 +303,7 @@ const ArticleDetailPage = () => {
 
         <div className="bg-secondary rounded-2xl p-5">
           <p className="text-[15px] text-foreground/80 leading-relaxed whitespace-pre-line">
-            {showChinese
-              ? extractChineseTranslationOnly(article.content)
-              : (article.originalContent || article.content)}
+            {showChinese ? chineseContent : (article.originalContent || article.content)}
           </p>
         </div>
       </div>
