@@ -14,19 +14,31 @@ const CategoryTabs = ({ categories, active, onChange }: CategoryTabsProps) => {
   const handleClick = (cat: string, index: number) => {
     onChange(cat);
 
-    // 点击后将该标签滚动到可视区域中央
     const container = scrollRef.current;
     const btn = buttonRefs.current[index];
     if (!container || !btn) return;
 
-    const containerRect = container.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
+    const containerLeft = container.scrollLeft;
+    const containerRight = containerLeft + container.clientWidth;
+    const btnLeft = btn.offsetLeft;
+    const btnRight = btnLeft + btn.offsetWidth;
+    const padding = 16; // 左右 padding
 
-    // 计算按钮相对于容器的偏移，滚动使其居中
-    const offset =
-      btn.offsetLeft - container.clientWidth / 2 + btn.offsetWidth / 2;
-
-    container.scrollTo({ left: offset, behavior: 'smooth' });
+    // 按钮右侧超出容器可视区 → 向右滚动刚好露出
+    if (btnRight + padding > containerRight) {
+      container.scrollTo({
+        left: btnRight + padding - container.clientWidth,
+        behavior: 'smooth',
+      });
+    }
+    // 按钮左侧超出容器可视区 → 向左滚动刚好露出
+    else if (btnLeft - padding < containerLeft) {
+      container.scrollTo({
+        left: btnLeft - padding,
+        behavior: 'smooth',
+      });
+    }
+    // 完全可见 → 不滚动
   };
 
   return (
