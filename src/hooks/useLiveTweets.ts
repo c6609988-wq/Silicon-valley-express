@@ -1,30 +1,32 @@
 import { useState, useEffect } from 'react';
 import { Article } from '@/types';
 
-const API_BASE = import.meta.env.VITE_SERVER_URL
-  || (import.meta.env.DEV ? 'http://localhost:3001' : '');
+const CACHE_KEY = 'home_articles_cache';
 
-const MAX_PAGES = 5;
+function saveCache(articles: Article[]) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(articles));
+  } catch {}
+}
 
-async function fetchAllArticles(): Promise<Article[]> {
-  const allArticles: Article[] = [];
-
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const url = import.meta.env.DEV
-      ? `${API_BASE}/api/tweets/latest?count=100&page=${page}`
-      : `/api/content?format=articles&limit=100&page=${page}`;
-
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-
-    const items: Article[] = data.articles || data.tweets || [];
-    allArticles.push(...items);
-
-    if (items.length < 100) break;
+function loadCache(): Article[] {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
+}
 
-  return allArticles;
+async function fetchArticles(): Promise<Article[]> {
+  const url = import.meta.env.DEV
+    ? 'http://localhost:3001/api/tweets/latest?count=100'
+    : '/api/content?format=articles&limit=100';
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.articles || data.tweets || [];
 }
 
 export function useLiveTweets(_count = 6) {
@@ -33,19 +35,31 @@ export function useLiveTweets(_count = 6) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetch_() {
+    async function load() {
       setLoading(true);
       setError(null);
       try {
-        const items = await fetchAllArticles();
-        setArticles(items);
+        const items = await fetchArticles();
+        if (items.length > 0) {
+          saveCache(items);
+          setArticles(items);
+        } else {
+          // API 成功但无数据，用缓存兜底
+          const cached = loadCache();
+          setArticles(cached);
+        }
       } catch (e: any) {
-        setError(e.message);
+        // API 失败，静默降级到本地缓存，不显示错误
+        const cached = loadCache();
+        setArticles(cached);
+        if (cached.length === 0) {
+          setError(e.message);
+        }
       } finally {
         setLoading(false);
       }
     }
-    fetch_();
+    load();
   }, []);
 
   return { articles, loading, error };
