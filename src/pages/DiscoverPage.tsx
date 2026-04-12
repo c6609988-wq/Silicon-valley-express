@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Check, Flame, Sparkles, X } from 'lucide-react';
 import MobileLayout from '@/components/layout/MobileLayout';
@@ -22,6 +22,40 @@ const DiscoverPage = () => {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const { toast } = useToast();
 
+  // 收集所有已关注的 source ID，同步到后端
+  const syncFollowedSources = useCallback((updatedChannels: Channel[]) => {
+    const followedIds = updatedChannels
+      .flatMap(ch => ch.sources || [])
+      .filter(s => s.isFollowed)
+      .map(s => s.id);
+
+    // 存 localStorage（离线可用）
+    localStorage.setItem('followed_source_ids', JSON.stringify(followedIds));
+
+    // 同步到 Supabase
+    fetch('/api/sources/follow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ followedIds }),
+    }).catch(() => {});
+  }, []);
+
+  // 初始化时从后端加载关注状态
+  useEffect(() => {
+    fetch('/api/sources/follow')
+      .then(r => r.json())
+      .then(({ followedIds }) => {
+        if (!followedIds) return;
+        const idSet = new Set(followedIds);
+        setChannels(prev => prev.map(ch => ({
+          ...ch,
+          isSubscribed: ch.sources?.some(s => idSet.has(s.id)) ?? ch.isSubscribed,
+          sources: ch.sources?.map(s => ({ ...s, isFollowed: idSet.has(s.id) })),
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSubscribe = (channelId: string) => {
     setChannels(prev => 
       prev.map(ch => 
@@ -42,7 +76,17 @@ const DiscoverPage = () => {
         description: `你已成功关注「${channel.name}」的全部 ${channel.sources?.length || 0} 个信息源`,
       });
     }
-    
+
+    setChannels(prev => {
+      const updated = prev.map(ch =>
+        ch.id === channelId
+          ? { ...ch, isSubscribed: !ch.isSubscribed, sources: ch.sources?.map(s => ({ ...s, isFollowed: !ch.isSubscribed })) }
+          : ch
+      );
+      syncFollowedSources(updated);
+      return updated;
+    });
+
     if (selectedChannel && selectedChannel.id === channelId) {
       const updatedChannel = channels.find(ch => ch.id === channelId);
       if (updatedChannel) {
@@ -56,15 +100,17 @@ const DiscoverPage = () => {
   };
 
   const handleFollowSource = (sourceId: string) => {
-    setChannels(prev =>
-      prev.map(ch => ({
+    setChannels(prev => {
+      const updated = prev.map(ch => ({
         ...ch,
         sources: ch.sources?.map(s =>
           s.id === sourceId ? { ...s, isFollowed: !s.isFollowed } : s
         )
-      }))
-    );
-    
+      }));
+      syncFollowedSources(updated);
+      return updated;
+    });
+
     if (selectedChannel) {
       setSelectedChannel({
         ...selectedChannel,

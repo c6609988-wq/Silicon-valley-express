@@ -6,7 +6,7 @@
   "crons": [
     {
       "path": "/api/cron/fetch",
-      "schedule": "0 23 * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/cron/fetch-afternoon",
@@ -20,7 +20,8 @@
     "api/sources.js": { "maxDuration": 120 },
     "api/push-feishu.js": { "maxDuration": 30 },
     "api/trigger.js": { "maxDuration": 300 },
-    "api/health.js": { "maxDuration": 10 }
+    "api/health.js": { "maxDuration": 10 },
+    "api/sources/follow.js": { "maxDuration": 10 }
   },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
