@@ -11,12 +11,13 @@ import { mockChannels } from '@/data/mockData';
 import { Channel } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
-const categories = ['全部', 'AI 科技', '投资动态', '创业公司', '人物观点'];
-
 const DiscoverPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [channels, setChannels] = useState<Channel[]>(mockChannels);
   const [activeCategory, setActiveCategory] = useState('全部');
+
+  // 动态计算有内容的分类标签（去重 + 保留顺序），始终把「全部」放第一位
+  const categories = ['全部', ...Array.from(new Set(channels.map(ch => ch.category).filter(Boolean)))];
   const [isLoading, setIsLoading] = useState(false);
   const [showBanner, setShowBanner] = useState(true);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
