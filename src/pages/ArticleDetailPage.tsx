@@ -208,9 +208,9 @@ const ArticleDetailPage = () => {
             <span className="text-lg">✨</span>
             <h2 className="text-base font-bold text-foreground">一句话摘要</h2>
           </div>
-          <div className="bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3">
-            <p className="text-[15px] text-foreground leading-relaxed">{summaryText}</p>
-          </div>
+          <p className="text-[15px] font-bold text-primary leading-relaxed">
+            {summaryText}
+          </p>
         </div>
       )}
 
@@ -224,39 +224,20 @@ const ArticleDetailPage = () => {
             <h2 className="text-base font-bold text-foreground">智能总结</h2>
           </div>
 
-          {/* 核心要点 */}
+          {/* 核心要点：合并成连贯段落 */}
           {keyPoints.length > 0 && (
-            <div className="space-y-3 mb-4">
-              {keyPoints.map((point, i) => {
-                const colonIdx = point.indexOf('：');
-                const label = colonIdx !== -1 ? point.slice(0, colonIdx + 1) : '';
-                const detail = colonIdx !== -1 ? point.slice(colonIdx + 1) : point;
-                return (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="mt-1 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0">
-                      {i + 1}
-                    </span>
-                    <p className="text-[14px] text-foreground leading-relaxed">
-                      {label && <span className="font-semibold">{label}</span>}
-                      {detail}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+            <p className="text-[14px] text-foreground leading-relaxed mb-4">
+              {keyPoints
+                .map(p => p.replace(/\*\*/g, '').replace(/^\[.*?\][：:]\s*/, '').trim())
+                .join('。') + '。'}
+            </p>
           )}
 
           {/* 划重点 */}
           {comment && (
-            <div className="bg-amber-50 border border-amber-200/60 rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <span className="text-sm">💡</span>
-                <span className="text-sm font-semibold text-amber-700">划重点</span>
-              </div>
-              <p className="text-[14px] text-foreground/80 leading-relaxed whitespace-pre-line">
-                {comment}
-              </p>
-            </div>
+            <p className="text-[14px] text-foreground/75 leading-relaxed whitespace-pre-line">
+              {comment.replace(/\*\*/g, '')}
+            </p>
           )}
         </div>
       )}
