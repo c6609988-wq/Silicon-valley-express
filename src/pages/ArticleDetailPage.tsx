@@ -18,42 +18,62 @@ import { API_BASE } from '@/lib/apiBase';
 const SERVER_URL = API_BASE;
 
 // ── 从 AI 分析文本中解析结构化字段 ─────────────────────────────
-function parseAIAnalysis(aiText: string) {
-  // 一句话摘要：优先取"划重点"第一句，否则取全文第一句
-  const commentMatch = aiText.match(/二[、.]\s*划重点[\s\S]*?\n([\s\S]*?)(?=###\s*三|三[、.]|$)/);
-  const commentRaw = commentMatch ? commentMatch[1].trim().replace(/\*\*/g, '') : '';
-  const oneLiner = commentRaw.split(/[。！？\n]/)[0].trim() || aiText.slice(0, 60).replace(/\*\*/g, '');
+function stripMd(text: string): string {
+  return text
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    .replace(/^#{1,4}\s*/gm, '')
+    .replace(/^\s*[-•]\s*/gm, '')
+    .trim();
+}
 
-  // 核心要点列表
-  const keypointsMatch = aiText.match(/一[、.]\s*今日核心要点[\s\S]*?\n([\s\S]*?)(?=###\s*二|二[、.])/);
-  const keypointsRaw = keypointsMatch ? keypointsMatch[1].trim() : '';
+// 取字符串里第一句完整的话（以。！？结尾）
+function firstSentence(text: string): string {
+  const clean = stripMd(text);
+  const m = clean.match(/^(.{5,80}[。！？])/);
+  return m ? m[1].trim() : clean.split(/\n/)[0].slice(0, 60).trim();
+}
+
+function parseAIAnalysis(aiText: string) {
+  // ── 一、核心要点 ──────────────────────────────────────
+  const keypointsMatch = aiText.match(/一[、.]\s*(?:今日)?核心要点[^\n]*\n([\s\S]*?)(?=##|###|二[、.]|$)/);
+  const keypointsRaw = keypointsMatch ? keypointsMatch[1] : '';
   const keyPoints = keypointsRaw
     .split('\n')
-    .filter(l => /^\d+[.)、]/.test(l.trim()))
-    .map(l => l.replace(/^\d+[.)、]\s*/, '').replace(/\*\*/g, '').trim())
-    .filter(Boolean);
+    .filter(l => /^\d+[.)、\s]/.test(l.trim()) || /^[-•\*]\s/.test(l.trim()))
+    .map(l => stripMd(l.replace(/^\d+[.)、]\s*/, '')))
+    .filter(s => s.length > 4);
 
-  // 划重点正文
-  const comment = commentRaw;
+  // ── 二、划重点 ────────────────────────────────────────
+  const commentMatch = aiText.match(/二[、.]\s*划重点[^\n]*\n([\s\S]*?)(?=##|###|三[、.]|$)/);
+  const comment = commentMatch ? stripMd(commentMatch[1]).trim() : '';
 
-  // 中文翻译部分
+  // ── 一句话摘要：划重点第一句 → 要点第一条 → 首行 ───────
+  let oneLiner = '';
+  if (comment) {
+    oneLiner = firstSentence(comment);
+  } else if (keyPoints.length > 0) {
+    oneLiner = firstSentence(keyPoints[0]);
+  } else {
+    oneLiner = firstSentence(aiText);
+  }
+
+  // ── 三、原文翻译 ──────────────────────────────────────
   const translationMatch = aiText.match(/三[、.]\s*原文翻译([\s\S]*)/);
   let chineseTranslation = '';
   if (translationMatch) {
-    const section = translationMatch[1];
     const results: string[] = [];
-    const blocks = section.split(/\n[-─]{2,}\n?/);
+    const blocks = translationMatch[1].split(/\n[-─]{2,}\n?/);
     for (const block of blocks) {
-      const lines = block.split('\n');
       const buf: string[] = [];
       let inTrans = false;
-      for (const line of lines) {
+      for (const line of block.split('\n')) {
         const t = line.trim();
         if (/^翻译[：:]/.test(t)) { inTrans = true; buf.push(t.replace(/^翻译[：:]/, '').trim()); }
         else if (/^原文[：:]/.test(t) || /^「/.test(t) || /^\[/.test(t)) { inTrans = false; }
-        else if (inTrans && t) { buf.push(line); }
+        else if (inTrans && t) { buf.push(t); }
       }
-      const text = buf.join('\n').trim();
+      const text = buf.join('').trim();
       if (text) results.push(text);
     }
     chineseTranslation = results.join('\n\n');
@@ -228,15 +248,15 @@ const ArticleDetailPage = () => {
           {keyPoints.length > 0 && (
             <p className="text-[14px] text-foreground leading-relaxed mb-4">
               {keyPoints
-                .map(p => p.replace(/\*\*/g, '').replace(/^\[.*?\][：:]\s*/, '').trim())
+                .map(p => p.replace(/^\[.*?\][：:]\s*/, '').replace(/[。]$/, '').trim())
                 .join('。') + '。'}
             </p>
           )}
 
           {/* 划重点 */}
           {comment && (
-            <p className="text-[14px] text-foreground/75 leading-relaxed whitespace-pre-line">
-              {comment.replace(/\*\*/g, '')}
+            <p className="text-[14px] text-foreground/75 leading-relaxed">
+              {comment}
             </p>
           )}
         </div>
