@@ -227,11 +227,11 @@ export const mockChannels: Channel[] = [
     category: 'AI 科技',
     sourceCount: 2,
     subscriberCount: 18600,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['AI', 'OpenAI', 'GPT'],
     sources: [
-      { id: 'openai_x', name: 'OpenAI', platform: 'twitter', icon: '𝕏', url: 'https://x.com/OpenAI', description: 'OpenAI 官方 X 账号', followerCount: 6200000, isFollowed: true, lastUpdated: new Date().toISOString() },
-      { id: 'openai_yt', name: 'OpenAI', platform: 'youtube', icon: '▶️', url: 'https://www.youtube.com/@OpenAI', description: 'OpenAI 官方 YouTube', followerCount: 980000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'openai_x', name: 'OpenAI', platform: 'twitter', icon: '𝕏', url: 'https://x.com/OpenAI', description: 'OpenAI 官方 X 账号', followerCount: 6200000, isFollowed: false, lastUpdated: new Date().toISOString() },
+      { id: 'openai_yt', name: 'OpenAI', platform: 'youtube', icon: '▶️', url: 'https://www.youtube.com/@OpenAI', description: 'OpenAI 官方 YouTube', followerCount: 980000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -242,10 +242,10 @@ export const mockChannels: Channel[] = [
     category: 'AI 科技',
     sourceCount: 1,
     subscriberCount: 12400,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['AI', 'Claude', 'Anthropic'],
     sources: [
-      { id: 'anthropic_x', name: 'Anthropic', platform: 'twitter', icon: '𝕏', url: 'https://x.com/AnthropicAI', description: 'Anthropic 官方账号', followerCount: 1800000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'anthropic_x', name: 'Anthropic', platform: 'twitter', icon: '𝕏', url: 'https://x.com/AnthropicAI', description: 'Anthropic 官方账号', followerCount: 1800000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -256,10 +256,10 @@ export const mockChannels: Channel[] = [
     category: 'AI 科技',
     sourceCount: 1,
     subscriberCount: 9800,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['AI', 'Google', 'DeepMind'],
     sources: [
-      { id: 'deepmind_x', name: 'Google DeepMind', platform: 'twitter', icon: '𝕏', url: 'https://x.com/GoogleDeepMind', description: 'Google DeepMind 官方账号', followerCount: 1200000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'deepmind_x', name: 'Google DeepMind', platform: 'twitter', icon: '𝕏', url: 'https://x.com/GoogleDeepMind', description: 'Google DeepMind 官方账号', followerCount: 1200000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -270,10 +270,10 @@ export const mockChannels: Channel[] = [
     category: '人物观点',
     sourceCount: 1,
     subscriberCount: 9200,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['AI', 'OpenAI', 'AGI'],
     sources: [
-      { id: 'sama_x', name: 'Sam Altman', platform: 'twitter', icon: '𝕏', url: 'https://x.com/sama', description: 'OpenAI CEO', followerCount: 3800000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'sama_x', name: 'Sam Altman', platform: 'twitter', icon: '𝕏', url: 'https://x.com/sama', description: 'OpenAI CEO', followerCount: 3800000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -284,10 +284,10 @@ export const mockChannels: Channel[] = [
     category: '人物观点',
     sourceCount: 1,
     subscriberCount: 6100,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['AI', 'Meta', 'LeCun'],
     sources: [
-      { id: 'ylecun_x', name: 'Yann LeCun', platform: 'twitter', icon: '𝕏', url: 'https://x.com/ylecun', description: 'Meta AI 首席科学家', followerCount: 820000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'ylecun_x', name: 'Yann LeCun', platform: 'twitter', icon: '𝕏', url: 'https://x.com/ylecun', description: 'Meta AI 首席科学家', followerCount: 820000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
 
@@ -300,10 +300,10 @@ export const mockChannels: Channel[] = [
     category: '深度分析与洞察',
     sourceCount: 1,
     subscriberCount: 8700,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['AI', '教育', '研究'],
     sources: [
-      { id: 'emollick_x', name: 'Ethan Mollick', platform: 'twitter', icon: '𝕏', url: 'https://x.com/emollick', description: '沃顿商学院 AI 研究者', followerCount: 560000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'emollick_x', name: 'Ethan Mollick', platform: 'twitter', icon: '𝕏', url: 'https://x.com/emollick', description: '沃顿商学院 AI 研究者', followerCount: 560000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -314,11 +314,11 @@ export const mockChannels: Channel[] = [
     category: '深度分析与洞察',
     sourceCount: 2,
     subscriberCount: 11300,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['AI', '技术', '教育'],
     sources: [
-      { id: 'karpathy_x', name: 'Andrej Karpathy', platform: 'twitter', icon: '𝕏', url: 'https://x.com/karpathy', description: '前 OpenAI 核心研究员', followerCount: 1100000, isFollowed: true, lastUpdated: new Date().toISOString() },
-      { id: 'karpathy_yt', name: 'Andrej Karpathy', platform: 'youtube', icon: '▶️', url: 'https://www.youtube.com/@AndrejKarpathy', description: 'AI 深度教学视频', followerCount: 890000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'karpathy_x', name: 'Andrej Karpathy', platform: 'twitter', icon: '𝕏', url: 'https://x.com/karpathy', description: '前 OpenAI 核心研究员', followerCount: 1100000, isFollowed: false, lastUpdated: new Date().toISOString() },
+      { id: 'karpathy_yt', name: 'Andrej Karpathy', platform: 'youtube', icon: '▶️', url: 'https://www.youtube.com/@AndrejKarpathy', description: 'AI 深度教学视频', followerCount: 890000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -329,10 +329,10 @@ export const mockChannels: Channel[] = [
     category: '深度分析与洞察',
     sourceCount: 1,
     subscriberCount: 5200,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['AI', '科普', 'YouTube'],
     sources: [
-      { id: 'aiexplained_yt', name: 'AI Explained', platform: 'youtube', icon: '▶️', url: 'https://www.youtube.com/@aiexplained-official', description: 'AI 深度科普频道', followerCount: 420000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'aiexplained_yt', name: 'AI Explained', platform: 'youtube', icon: '▶️', url: 'https://www.youtube.com/@aiexplained-official', description: 'AI 深度科普频道', followerCount: 420000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -343,10 +343,10 @@ export const mockChannels: Channel[] = [
     category: '深度分析与洞察',
     sourceCount: 1,
     subscriberCount: 7800,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['投资', 'VC', 'a16z'],
     sources: [
-      { id: 'a16z_web', name: 'a16z Blog', platform: 'website', icon: '📝', url: 'https://a16z.com/feed/', description: 'a16z 官方博客 RSS', followerCount: 320000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'a16z_web', name: 'a16z Blog', platform: 'website', icon: '📝', url: 'https://a16z.com/feed/', description: 'a16z 官方博客 RSS', followerCount: 320000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
 
@@ -359,10 +359,10 @@ export const mockChannels: Channel[] = [
     category: '产品与独立开发者',
     sourceCount: 1,
     subscriberCount: 8900,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['产品', '创业', 'AI工具'],
     sources: [
-      { id: 'producthunt_web', name: 'Product Hunt', platform: 'website', icon: '📝', url: 'https://www.producthunt.com/feed', description: 'Product Hunt RSS', followerCount: 580000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'producthunt_web', name: 'Product Hunt', platform: 'website', icon: '📝', url: 'https://www.producthunt.com/feed', description: 'Product Hunt RSS', followerCount: 580000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -373,10 +373,10 @@ export const mockChannels: Channel[] = [
     category: '产品与独立开发者',
     sourceCount: 1,
     subscriberCount: 7200,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['独立开发', 'SaaS', 'AI创业'],
     sources: [
-      { id: 'levelsio_x', name: 'Pieter Levels', platform: 'twitter', icon: '𝕏', url: 'https://x.com/levelsio', description: '独立开发者 / AI SaaS 创始人', followerCount: 540000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'levelsio_x', name: 'Pieter Levels', platform: 'twitter', icon: '𝕏', url: 'https://x.com/levelsio', description: '独立开发者 / AI SaaS 创始人', followerCount: 540000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -387,10 +387,10 @@ export const mockChannels: Channel[] = [
     category: '产品与独立开发者',
     sourceCount: 1,
     subscriberCount: 6400,
-    isSubscribed: true,
+    isSubscribed: false,
     tags: ['开源', 'AI', '模型'],
     sources: [
-      { id: 'huggingface_web', name: 'Hugging Face Blog', platform: 'website', icon: '📝', url: 'https://huggingface.co/blog/feed.xml', description: 'Hugging Face 官方博客', followerCount: 280000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'huggingface_web', name: 'Hugging Face Blog', platform: 'website', icon: '📝', url: 'https://huggingface.co/blog/feed.xml', description: 'Hugging Face 官方博客', followerCount: 280000, isFollowed: false, lastUpdated: new Date().toISOString() },
     ],
   },
 ];

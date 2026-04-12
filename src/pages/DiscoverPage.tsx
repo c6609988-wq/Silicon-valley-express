@@ -142,7 +142,7 @@ const DiscoverPage = () => {
           <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="搜索频道、博主..." />
         </div>
 
-        <div className="py-2 -mx-0 overflow-hidden">
+        <div className="py-2">
           <CategoryTabs categories={categories} active={activeCategory} onChange={setActiveCategory} />
         </div>
 
