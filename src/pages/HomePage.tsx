@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import MobileLayout from '@/components/layout/MobileLayout';
-import DateSelector from '@/components/home/DateSelector';
 import ArticleCard from '@/components/home/ArticleCard';
 import OnboardingModal from '@/components/onboarding/OnboardingModal';
 import PullToRefresh from '@/components/common/PullToRefresh';
@@ -17,24 +16,20 @@ function groupByDate(articles: Article[]): { dateLabel: string; dateKey: string;
 
   articles.forEach(article => {
     const bjDate = new Date(new Date(article.publishTime).getTime() + 8 * 3600 * 1000);
-    const key = bjDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    const key = bjDate.toISOString().split('T')[0];
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(article);
   });
 
-  // 按日期降序排列
   const sorted = Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-
   const today = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().split('T')[0];
   const yesterday = new Date(new Date().getTime() + 8 * 3600 * 1000 - 86400000).toISOString().split('T')[0];
 
   return sorted.map(([key, items]) => {
     let dateLabel = '';
-    if (key === today) {
-      dateLabel = '今天';
-    } else if (key === yesterday) {
-      dateLabel = '昨天';
-    } else {
+    if (key === today) dateLabel = '今天';
+    else if (key === yesterday) dateLabel = '昨天';
+    else {
       const [, m, d] = key.split('-');
       dateLabel = `${parseInt(m)}月${parseInt(d)}日`;
     }
@@ -73,54 +68,59 @@ const HomePage = () => {
 
       <MobileLayout>
         <PullToRefresh onRefresh={handleRefresh}>
-          {/* 顶部问候语 */}
+
+          {/* ── 顶部 Header ─────────────────────────────────────── */}
           <motion.header
-            className="sticky top-0 bg-background/95 backdrop-blur-sm z-30 safe-area-inset-top"
+            className="sticky top-0 bg-background/95 backdrop-blur-sm z-30 safe-area-inset-top border-b border-border/60"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="px-4 pt-4 pb-2">
+            <div className="px-4 pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-xl font-bold text-foreground">{greeting}，{mockUser.nickname} 👋</h1>
-                  <p className="text-sm text-muted-foreground mt-0.5">为你整理了今日资讯</p>
+                  <span className="text-[10px] font-bold tracking-[0.18em] text-primary uppercase">硅谷速递</span>
+                  <h1 className="text-[20px] font-bold text-foreground leading-tight mt-0.5">
+                    {greeting}，{mockUser.nickname} 👋
+                  </h1>
+                  <p className="text-xs text-muted-foreground mt-0.5">AI 为你精选今日科技资讯</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-bold text-foreground">{mockUser.nickname.charAt(0)}</span>
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-sm">
+                  <span className="text-sm font-bold text-primary-foreground">{mockUser.nickname.charAt(0)}</span>
                 </div>
               </div>
             </div>
           </motion.header>
 
-          {/* 日期选择器 */}
-          <div className="px-4 py-2">
-            <DateSelector />
-          </div>
-
-          {/* 内容区 */}
-          <div className="px-4 py-3 pb-8">
+          {/* ── 内容区 ──────────────────────────────────────────── */}
+          <div className="px-4 pt-4 pb-8">
             {loading ? (
               <div className="space-y-4">
                 {[1, 2, 3, 4, 5, 6].map(i => <ArticleCardSkeleton key={i} />)}
               </div>
             ) : error ? (
-              <p className="text-sm text-muted-foreground text-center py-8">获取推文失败：{error}</p>
-            ) : grouped.length === 0 ? (
               <div className="text-center py-16 space-y-2">
-                <p className="text-2xl">📭</p>
-                <p className="text-sm text-muted-foreground">暂无内容，每天上午 7:00 自动更新</p>
+                <p className="text-2xl">⚠️</p>
+                <p className="text-sm text-muted-foreground">获取资讯失败，请下拉刷新重试</p>
+              </div>
+            ) : grouped.length === 0 ? (
+              <div className="text-center py-20 space-y-3">
+                <p className="text-4xl">📭</p>
+                <p className="text-sm font-medium text-foreground">暂无内容</p>
+                <p className="text-xs text-muted-foreground">每天上午 7:00 自动更新</p>
               </div>
             ) : (
               grouped.map(({ dateKey, dateLabel, items }) => (
-                <div key={dateKey} className="mb-6">
-                  {/* 灰色日期分隔线 */}
-                  <div className="flex items-center gap-3 mb-3">
+                <div key={dateKey} className="mb-8">
+                  {/* 日期标签 */}
+                  <div className="flex items-center gap-3 mb-4">
                     <div className="h-px flex-1 bg-border" />
-                    <span className="text-xs text-muted-foreground font-medium px-1">{dateLabel}</span>
+                    <span className="text-xs font-semibold text-muted-foreground bg-background px-2 py-0.5 rounded-full border border-border">
+                      {dateLabel}
+                    </span>
                     <div className="h-px flex-1 bg-border" />
                   </div>
-                  {/* 该日期下的文章 */}
-                  <div className="space-y-4">
+                  {/* 文章列表 */}
+                  <div className="space-y-3">
                     {items.map((article, index) => (
                       <ArticleCard key={article.id} article={article} index={index} />
                     ))}
