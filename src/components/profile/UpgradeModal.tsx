@@ -45,14 +45,14 @@ const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
         onClick={onClose}
       >
         <motion.div
-          className="w-full max-w-[430px] mx-auto bg-background rounded-t-2xl"
+          className="w-full max-w-[430px] mx-auto bg-background rounded-t-2xl max-h-[85vh] flex flex-col"
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="p-6">
+          <div className="p-6 overflow-y-auto pb-8">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <Crown className="w-6 h-6 text-primary" />
