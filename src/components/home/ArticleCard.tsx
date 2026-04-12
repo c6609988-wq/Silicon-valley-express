@@ -9,17 +9,32 @@ interface ArticleCardProps {
   index?: number;
 }
 
-// 去除 markdown 符号，提取第一句干净的摘要
+// 从 AI 分析文本中提取第一条要点的核心内容（去除所有 markdown 标记和前缀标签）
 function cleanSummary(text: string): string {
   if (!text) return '';
+
+  // 尝试提取第一个编号要点的内容
+  // 匹配 "1. **label**：content" 或 "1. content" 格式
+  const pointMatch = text.match(/\n?\s*\d+[.、·]\s*(?:\*\*[^*\n]*\*\*\s*[：:]\s*)?([^\n*]{6,})/);
+  if (pointMatch) {
+    return pointMatch[1]
+      .replace(/\*\*/g, '')
+      .replace(/^\s*[：:]\s*/, '')
+      .trim()
+      .slice(0, 80);
+  }
+
+  // 回退：去除所有标题行和 markdown 后取第一句
   return text
-    .replace(/\*\*|__|\*|_|`|#+\s*/g, '')   // 去掉 ** __ * _ ` ## 等
-    .replace(/^[-•]\s*/gm, '')               // 去掉列表符号
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // 保留链接文字
-    .replace(/\n+/g, ' ')                    // 换行转空格
+    .replace(/\*\*[^*\n]*[：:][^\n]*\n?/g, '')  // 去掉 **标题：** 行
+    .replace(/\*\*/g, '')
+    .replace(/^\s*\d+[.、·]\s*/gm, '')           // 去掉序号
+    .replace(/^[-•]\s*/gm, '')
+    .replace(/\n+/g, ' ')
     .trim()
-    .split(/(?<=[。！？.!?])\s*/)[0]          // 只取第一句
-    .slice(0, 80);                           // 最多 80 字
+    .split(/(?<=[。！？])/)[0]
+    .trim()
+    .slice(0, 80);
 }
 
 const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {
