@@ -227,11 +227,11 @@ export const mockChannels: Channel[] = [
     category: 'AI 科技',
     sourceCount: 2,
     subscriberCount: 18600,
-    isSubscribed: false,
+    isSubscribed: true,
     tags: ['AI', 'OpenAI', 'GPT'],
     sources: [
-      { id: 'openai_x', name: 'OpenAI', platform: 'twitter', icon: '𝕏', url: 'https://x.com/OpenAI', description: 'OpenAI 官方 X 账号', followerCount: 6200000, isFollowed: false, lastUpdated: new Date().toISOString() },
-      { id: 'openai_yt', name: 'OpenAI', platform: 'youtube', icon: '▶️', url: 'https://www.youtube.com/@OpenAI', description: 'OpenAI 官方 YouTube', followerCount: 980000, isFollowed: false, lastUpdated: new Date().toISOString() },
+      { id: 'openai_x', name: 'OpenAI', platform: 'twitter', icon: '𝕏', url: 'https://x.com/OpenAI', description: 'OpenAI 官方 X 账号', followerCount: 6200000, isFollowed: true, lastUpdated: new Date().toISOString() },
+      { id: 'openai_yt', name: 'OpenAI', platform: 'youtube', icon: '▶️', url: 'https://www.youtube.com/@OpenAI', description: 'OpenAI 官方 YouTube', followerCount: 980000, isFollowed: true, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -242,10 +242,10 @@ export const mockChannels: Channel[] = [
     category: 'AI 科技',
     sourceCount: 1,
     subscriberCount: 12400,
-    isSubscribed: false,
+    isSubscribed: true,
     tags: ['AI', 'Claude', 'Anthropic'],
     sources: [
-      { id: 'anthropic_x', name: 'Anthropic', platform: 'twitter', icon: '𝕏', url: 'https://x.com/AnthropicAI', description: 'Anthropic 官方账号', followerCount: 1800000, isFollowed: false, lastUpdated: new Date().toISOString() },
+      { id: 'anthropic_x', name: 'Anthropic', platform: 'twitter', icon: '𝕏', url: 'https://x.com/AnthropicAI', description: 'Anthropic 官方账号', followerCount: 1800000, isFollowed: true, lastUpdated: new Date().toISOString() },
     ],
   },
   {
@@ -256,10 +256,10 @@ export const mockChannels: Channel[] = [
     category: 'AI 科技',
     sourceCount: 1,
     subscriberCount: 9800,
-    isSubscribed: false,
+    isSubscribed: true,
     tags: ['AI', 'Google', 'DeepMind'],
     sources: [
-      { id: 'deepmind_x', name: 'Google DeepMind', platform: 'twitter', icon: '𝕏', url: 'https://x.com/GoogleDeepMind', description: 'Google DeepMind 官方账号', followerCount: 1200000, isFollowed: false, lastUpdated: new Date().toISOString() },
+      { id: 'deepmind_x', name: 'Google DeepMind', platform: 'twitter', icon: '𝕏', url: 'https://x.com/GoogleDeepMind', description: 'Google DeepMind 官方账号', followerCount: 1200000, isFollowed: true, lastUpdated: new Date().toISOString() },
     ],
   },
   {

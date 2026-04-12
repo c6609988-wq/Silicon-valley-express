@@ -41,16 +41,17 @@ const DiscoverPage = () => {
     }).catch(() => {});
   }, []);
 
-  // 初始化时从后端加载关注状态
+  // 初始化时从后端加载关注状态（仅当后端有明确记录时才覆盖本地默认值）
   useEffect(() => {
     fetch('/api/sources/follow')
       .then(r => r.json())
       .then(({ followedIds }) => {
-        if (!followedIds) return;
-        const idSet = new Set(followedIds);
+        // followedIds 为 null 表示后端未设置过，保留本地默认值
+        if (!Array.isArray(followedIds)) return;
+        const idSet = new Set<string>(followedIds);
         setChannels(prev => prev.map(ch => ({
           ...ch,
-          isSubscribed: ch.sources?.some(s => idSet.has(s.id)) ?? ch.isSubscribed,
+          isSubscribed: ch.sources?.some(s => idSet.has(s.id)) ?? false,
           sources: ch.sources?.map(s => ({ ...s, isFollowed: idSet.has(s.id) })),
         })));
       })
@@ -58,45 +59,36 @@ const DiscoverPage = () => {
   }, []);
 
   const handleSubscribe = (channelId: string) => {
-    setChannels(prev => 
-      prev.map(ch => 
-        ch.id === channelId 
-          ? { 
-              ...ch, 
-              isSubscribed: !ch.isSubscribed,
-              sources: ch.sources?.map(s => ({ ...s, isFollowed: !ch.isSubscribed }))
-            }
-          : ch
-      )
-    );
-    
     const channel = channels.find(ch => ch.id === channelId);
-    if (channel && !channel.isSubscribed) {
-      toast({
-        title: "已关注",
-        description: `你已成功关注「${channel.name}」的全部 ${channel.sources?.length || 0} 个信息源`,
-      });
-    }
+    if (!channel) return;
 
+    const nextSubscribed = !channel.isSubscribed;
+
+    // 只调用一次 setChannels，避免两次调用互相抵消
     setChannels(prev => {
       const updated = prev.map(ch =>
         ch.id === channelId
-          ? { ...ch, isSubscribed: !ch.isSubscribed, sources: ch.sources?.map(s => ({ ...s, isFollowed: !ch.isSubscribed })) }
+          ? { ...ch, isSubscribed: nextSubscribed, sources: ch.sources?.map(s => ({ ...s, isFollowed: nextSubscribed })) }
           : ch
       );
       syncFollowedSources(updated);
       return updated;
     });
 
+    if (nextSubscribed) {
+      toast({
+        title: "已关注",
+        description: `你已成功关注「${channel.name}」的全部 ${channel.sources?.length || 0} 个信息源`,
+      });
+    }
+
+    // 同步更新弹窗内的选中频道状态
     if (selectedChannel && selectedChannel.id === channelId) {
-      const updatedChannel = channels.find(ch => ch.id === channelId);
-      if (updatedChannel) {
-        setSelectedChannel({
-          ...updatedChannel,
-          isSubscribed: !updatedChannel.isSubscribed,
-          sources: updatedChannel.sources?.map(s => ({ ...s, isFollowed: !updatedChannel.isSubscribed }))
-        });
-      }
+      setSelectedChannel({
+        ...channel,
+        isSubscribed: nextSubscribed,
+        sources: channel.sources?.map(s => ({ ...s, isFollowed: nextSubscribed })),
+      });
     }
   };
 
