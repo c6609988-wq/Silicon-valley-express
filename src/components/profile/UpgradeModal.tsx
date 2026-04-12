@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Crown, Zap, Star, Clock, Shield, Check } from 'lucide-react';
+import { X, Crown, Zap, Star, Clock, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface UpgradeModalProps {
@@ -11,9 +12,18 @@ const plans = [
   {
     id: 'monthly',
     label: '月度会员',
-    price: '¥29',
+    price: '¥19.9',
     period: '/月',
     saving: '',
+    popular: false,
+  },
+  {
+    id: 'quarterly',
+    label: '季度会员',
+    price: '¥59.9',
+    period: '/季',
+    saving: '省 ¥0.1',
+    popular: false,
   },
   {
     id: 'yearly',
@@ -33,7 +43,11 @@ const features = [
 ];
 
 const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
+  const [selectedPlan, setSelectedPlan] = useState('yearly');
+
   if (!isOpen) return null;
+
+  const current = plans.find(p => p.id === selectedPlan)!;
 
   return (
     <AnimatePresence>
@@ -53,16 +67,18 @@ const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-6 overflow-y-auto pb-8">
+            {/* 标题 */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <Crown className="w-6 h-6 text-primary" />
                 <h2 className="text-lg font-bold text-foreground">升级 Pro</h2>
               </div>
-              <button onClick={onClose}>
+              <button onClick={onClose} className="p-1">
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
 
+            {/* 权益列表 */}
             <div className="space-y-3 mb-6">
               {features.map(({ icon: Icon, label }) => (
                 <div key={label} className="flex items-center gap-3">
@@ -74,33 +90,41 @@ const UpgradeModal = ({ isOpen, onClose }: UpgradeModalProps) => {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              {plans.map((plan) => (
-                <button
-                  key={plan.id}
-                  className={`relative p-4 rounded-xl border-2 text-left transition-colors ${
-                    plan.popular ? 'border-primary bg-primary/5' : 'border-border'
-                  }`}
-                >
-                  {plan.popular && (
-                    <span className="absolute -top-2.5 right-3 px-2 py-0.5 bg-primary text-primary-foreground text-xs rounded-full">
-                      推荐
-                    </span>
-                  )}
-                  <p className="text-sm text-muted-foreground">{plan.label}</p>
-                  <p className="text-xl font-bold text-foreground">
-                    {plan.price}
-                    <span className="text-xs font-normal text-muted-foreground">{plan.period}</span>
-                  </p>
-                  {plan.saving && (
-                    <p className="text-xs text-primary mt-1">{plan.saving}</p>
-                  )}
-                </button>
-              ))}
+            {/* 套餐选择 — 三列 */}
+            <div className="grid grid-cols-3 gap-2 mb-6">
+              {plans.map((plan) => {
+                const isSelected = selectedPlan === plan.id;
+                return (
+                  <button
+                    key={plan.id}
+                    onClick={() => setSelectedPlan(plan.id)}
+                    className={`relative p-3 rounded-xl border-2 text-left transition-all ${
+                      isSelected
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border bg-background'
+                    }`}
+                  >
+                    {plan.popular && (
+                      <span className="absolute -top-2.5 right-2 px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] rounded-full whitespace-nowrap">
+                        推荐
+                      </span>
+                    )}
+                    <p className="text-xs text-muted-foreground mb-1">{plan.label}</p>
+                    <p className="text-base font-bold text-foreground leading-tight">
+                      {plan.price}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{plan.period}</p>
+                    {plan.saving && (
+                      <p className="text-[10px] text-primary mt-1">{plan.saving}</p>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
+            {/* 升级按钮 */}
             <Button className="w-full h-12 rounded-xl text-base">
-              立即升级
+              立即升级 · {current.price}{current.period}
             </Button>
             <p className="text-xs text-muted-foreground text-center mt-3">
               7 天免费试用，随时取消
