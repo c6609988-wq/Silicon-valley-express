@@ -9,6 +9,19 @@ interface ArticleCardProps {
   index?: number;
 }
 
+// 去除 markdown 符号，提取第一句干净的摘要
+function cleanSummary(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\*\*|__|\*|_|`|#+\s*/g, '')   // 去掉 ** __ * _ ` ## 等
+    .replace(/^[-•]\s*/gm, '')               // 去掉列表符号
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // 保留链接文字
+    .replace(/\n+/g, ' ')                    // 换行转空格
+    .trim()
+    .split(/(?<=[。！？.!?])\s*/)[0]          // 只取第一句
+    .slice(0, 80);                           // 最多 80 字
+}
+
 const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {
   const navigate = useNavigate();
 
@@ -45,7 +58,7 @@ const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {
 
       {/* 摘要 */}
       <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2 mb-2">
-        {article.summary}
+        {cleanSummary(article.summary || article.aiSummary || '')}
       </p>
 
       {/* 底部信息 */}
