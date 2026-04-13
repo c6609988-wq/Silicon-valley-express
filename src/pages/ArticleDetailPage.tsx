@@ -17,7 +17,8 @@ import { API_BASE } from '@/lib/apiBase';
 
 const SERVER_URL = API_BASE;
 
-// ── 从 AI 分析文本中解析结构化字段 ─────────────────────────────
+// ── 工具函数 ──────────────────────────────────────────────────
+// 去除所有 Markdown 符号
 function stripMd(text: string): string {
   return text
     .replace(/\*\*/g, '')
@@ -27,56 +28,92 @@ function stripMd(text: string): string {
     .trim();
 }
 
-// 取字符串里第一句完整的话（以。！？结尾）
+// 取第一句完整的话（以。！？结尾，长度 5-80）
 function firstSentence(text: string): string {
   const clean = stripMd(text);
   const m = clean.match(/^(.{5,80}[。！？])/);
   return m ? m[1].trim() : clean.split(/\n/)[0].slice(0, 60).trim();
 }
 
+// 提取原文翻译块中的"翻译："部分
+function parseTranslation(raw: string): string {
+  const results: string[] = [];
+  const blocks = raw.split(/\n[-─]{2,}\n?/);
+  for (const block of blocks) {
+    const buf: string[] = [];
+    let inTrans = false;
+    for (const line of block.split('\n')) {
+      const t = line.trim();
+      if (/^翻译[：:]/.test(t)) {
+        inTrans = true;
+        buf.push(t.replace(/^翻译[：:]/, '').trim());
+      } else if (/^原文[：:]/.test(t) || /^「/.test(t) || /^\[/.test(t)) {
+        inTrans = false;
+      } else if (inTrans && t) {
+        buf.push(t);
+      }
+    }
+    const s = buf.join('').trim();
+    if (s) results.push(s);
+  }
+  return results.join('\n\n');
+}
+
+// ── 核心解析函数（兼容新旧两种 AI 输出格式）────────────────────
 function parseAIAnalysis(aiText: string) {
-  // ── 一、核心要点 ──────────────────────────────────────
-  const keypointsMatch = aiText.match(/一[、.]\s*(?:今日)?核心要点[^\n]*\n([\s\S]*?)(?=##|###|二[、.]|$)/);
-  const keypointsRaw = keypointsMatch ? keypointsMatch[1] : '';
-  const keyPoints = keypointsRaw
-    .split('\n')
-    .filter(l => /^\d+[.)、\s]/.test(l.trim()) || /^[-•\*]\s/.test(l.trim()))
-    .map(l => stripMd(l.replace(/^\d+[.)、]\s*/, '')))
-    .filter(s => s.length > 4);
+  const isNewFormat = /一[、.]\s*(?:今日)?核心要点/.test(aiText);
 
-  // ── 二、划重点 ────────────────────────────────────────
-  const commentMatch = aiText.match(/二[、.]\s*划重点[^\n]*\n([\s\S]*?)(?=##|###|三[、.]|$)/);
-  const comment = commentMatch ? stripMd(commentMatch[1]).trim() : '';
+  let keyPoints: string[] = [];
+  let comment = '';
+  let chineseTranslation = '';
 
-  // ── 一句话摘要：划重点第一句 → 要点第一条 → 首行 ───────
+  if (isNewFormat) {
+    // ── 新格式（v3 提示词）：一、今日核心要点 / 二、划重点 / 三、原文翻译
+    const kpMatch = aiText.match(/一[、.]\s*(?:今日)?核心要点[^\n]*\n([\s\S]*?)(?=二[、.]|$)/);
+    keyPoints = (kpMatch?.[1] || '')
+      .split('\n')
+      .filter(l => /^\d+[.)、]/.test(l.trim()))
+      .map(l => stripMd(
+        l.replace(/^\d+[.)、]\s*/, '')       // 去序号
+         .replace(/^[\w\s]+[：:]\s*/, '')    // 去"话题关键词："前缀
+         .trim()
+      ))
+      .filter(s => s.length > 4);
+
+    const cmMatch = aiText.match(/二[、.]\s*划重点[^\n]*\n([\s\S]*?)(?=三[、.]|$)/);
+    comment = stripMd(cmMatch?.[1] || '').trim();
+
+    const trMatch = aiText.match(/三[、.]\s*原文翻译([\s\S]*)/);
+    chineseTranslation = parseTranslation(trMatch?.[1] || '');
+
+  } else {
+    // ── 旧格式（兼容旧数据）：**核心要点提炼：** 1. **事件**：xxx
+    // 提取所有编号条目
+    const pointRe = /\d+[.)、]\s*(?:\*\*[^*\n]*\*\*\s*[：:]\s*)?([^\n*]{6,})/g;
+    let m;
+    while ((m = pointRe.exec(aiText)) !== null) {
+      const s = stripMd(m[1]).replace(/^[\w\s]+[：:]\s*/, '').trim();
+      if (s.length > 4) keyPoints.push(s);
+      if (keyPoints.length >= 7) break;
+    }
+
+    // 旧格式"划重点"
+    const cmMatch = aiText.match(/\*{0,2}划重点[：:]\*{0,2}\s*\n?([\s\S]*?)(?=\*{0,2}原文翻译|\*{0,2}三[、.]|$)/);
+    comment = stripMd(cmMatch?.[1] || '').trim();
+
+    // 旧格式"原文翻译"
+    const trMatch = aiText.match(/\*{0,2}原文翻译[：:]\*{0,2}\s*\n?([\s\S]*)/);
+    chineseTranslation = parseTranslation(trMatch?.[1] || '');
+  }
+
+  // ── 一句话摘要：优先取划重点第一句，其次取要点连句，最后取全文首句
   let oneLiner = '';
   if (comment) {
     oneLiner = firstSentence(comment);
   } else if (keyPoints.length > 0) {
     oneLiner = firstSentence(keyPoints[0]);
   } else {
-    oneLiner = firstSentence(aiText);
-  }
-
-  // ── 三、原文翻译 ──────────────────────────────────────
-  const translationMatch = aiText.match(/三[、.]\s*原文翻译([\s\S]*)/);
-  let chineseTranslation = '';
-  if (translationMatch) {
-    const results: string[] = [];
-    const blocks = translationMatch[1].split(/\n[-─]{2,}\n?/);
-    for (const block of blocks) {
-      const buf: string[] = [];
-      let inTrans = false;
-      for (const line of block.split('\n')) {
-        const t = line.trim();
-        if (/^翻译[：:]/.test(t)) { inTrans = true; buf.push(t.replace(/^翻译[：:]/, '').trim()); }
-        else if (/^原文[：:]/.test(t) || /^「/.test(t) || /^\[/.test(t)) { inTrans = false; }
-        else if (inTrans && t) { buf.push(t); }
-      }
-      const text = buf.join('').trim();
-      if (text) results.push(text);
-    }
-    chineseTranslation = results.join('\n\n');
+    oneLiner = firstSentence(aiText);   // stripMd 在 firstSentence 内调用，确保干净
   }
 
   return { oneLiner, keyPoints, comment, chineseTranslation };
@@ -165,8 +202,8 @@ const ArticleDetailPage = () => {
   const aiRaw = article.aiComment || article.aiSummary || '';
   const { oneLiner, keyPoints, comment, chineseTranslation } = parseAIAnalysis(aiRaw);
 
-  // 摘要回退：用 article.summary
-  const summaryText = oneLiner || article.summary || '';
+  // 摘要：始终通过 stripMd 过滤，防止 ** 泄漏
+  const summaryText = stripMd(oneLiner || article.summary || '');
 
   // 中文内容回退
   const chineseContent = chineseTranslation || article.content || '';
