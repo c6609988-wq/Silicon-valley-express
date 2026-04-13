@@ -28,13 +28,6 @@ function stripMd(text: string): string {
     .trim();
 }
 
-// 取第一句完整的话（以。！？结尾，长度 5-80）
-function firstSentence(text: string): string {
-  const clean = stripMd(text);
-  const m = clean.match(/^(.{5,80}[。！？])/);
-  return m ? m[1].trim() : clean.split(/\n/)[0].slice(0, 60).trim();
-}
-
 // 提取原文翻译块中的"翻译："部分
 function parseTranslation(raw: string): string {
   const results: string[] = [];
@@ -59,64 +52,59 @@ function parseTranslation(raw: string): string {
   return results.join('\n\n');
 }
 
-// ── 核心解析函数（兼容新旧两种 AI 输出格式）────────────────────
+// ── 核心解析函数（兼容 v4 / v3 / 旧格式三种 AI 输出）───────────
 function parseAIAnalysis(aiText: string) {
-  const isNewFormat = /一[、.]\s*(?:今日)?核心要点/.test(aiText);
-
-  let keyPoints: string[] = [];
-  let comment = '';
+  let keyPoint = '';   // 核心要点：一句话
+  let insight = '';    // 深度解读：一段话
   let chineseTranslation = '';
 
-  if (isNewFormat) {
-    // ── 新格式（v3 提示词）：一、今日核心要点 / 二、划重点 / 三、原文翻译
+  // ── v4 格式：核心要点 / 深度解读 / 原文翻译 ─────────────────
+  if (/^核心要点\s*$/m.test(aiText)) {
+    const kpMatch = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n深度解读|$)/);
+    keyPoint = stripMd(kpMatch?.[1] || '').trim();
+
+    const insMatch = aiText.match(/深度解读\s*\n([\s\S]*?)(?=\n原文翻译|$)/);
+    insight = stripMd(insMatch?.[1] || '').trim();
+
+    const trMatch = aiText.match(/原文翻译\s*\n([\s\S]*)/);
+    chineseTranslation = parseTranslation(trMatch?.[1] || '');
+
+  // ── v3 格式：一、今日核心要点 / 二、划重点 / 三、原文翻译 ────
+  } else if (/一[、.]\s*(?:今日)?核心要点/.test(aiText)) {
     const kpMatch = aiText.match(/一[、.]\s*(?:今日)?核心要点[^\n]*\n([\s\S]*?)(?=二[、.]|$)/);
-    keyPoints = (kpMatch?.[1] || '')
+    const points = (kpMatch?.[1] || '')
       .split('\n')
       .filter(l => /^\d+[.)、]/.test(l.trim()))
-      .map(l => stripMd(
-        l.replace(/^\d+[.)、]\s*/, '')       // 去序号
-         .replace(/^[\w\s]+[：:]\s*/, '')    // 去"话题关键词："前缀
-         .trim()
-      ))
+      .map(l => stripMd(l.replace(/^\d+[.)、]\s*/, '').replace(/^[\w\s]+[：:]\s*/, '').trim()))
       .filter(s => s.length > 4);
+    keyPoint = points[0] || '';
 
     const cmMatch = aiText.match(/二[、.]\s*划重点[^\n]*\n([\s\S]*?)(?=三[、.]|$)/);
-    comment = stripMd(cmMatch?.[1] || '').trim();
+    insight = stripMd(cmMatch?.[1] || '').trim();
 
     const trMatch = aiText.match(/三[、.]\s*原文翻译([\s\S]*)/);
     chineseTranslation = parseTranslation(trMatch?.[1] || '');
 
+  // ── 旧格式：**核心要点提炼：** 等 ───────────────────────────
   } else {
-    // ── 旧格式（兼容旧数据）：**核心要点提炼：** 1. **事件**：xxx
-    // 提取所有编号条目
     const pointRe = /\d+[.)、]\s*(?:\*\*[^*\n]*\*\*\s*[：:]\s*)?([^\n*]{6,})/g;
-    let m;
-    while ((m = pointRe.exec(aiText)) !== null) {
-      const s = stripMd(m[1]).replace(/^[\w\s]+[：:]\s*/, '').trim();
-      if (s.length > 4) keyPoints.push(s);
-      if (keyPoints.length >= 7) break;
-    }
+    let m = pointRe.exec(aiText);
+    if (m) keyPoint = stripMd(m[1]).replace(/^[\w\s]+[：:]\s*/, '').trim();
 
-    // 旧格式"划重点"
     const cmMatch = aiText.match(/\*{0,2}划重点[：:]\*{0,2}\s*\n?([\s\S]*?)(?=\*{0,2}原文翻译|\*{0,2}三[、.]|$)/);
-    comment = stripMd(cmMatch?.[1] || '').trim();
+    insight = stripMd(cmMatch?.[1] || '').trim();
 
-    // 旧格式"原文翻译"
     const trMatch = aiText.match(/\*{0,2}原文翻译[：:]\*{0,2}\s*\n?([\s\S]*)/);
     chineseTranslation = parseTranslation(trMatch?.[1] || '');
   }
 
-  // ── 一句话摘要：优先取划重点第一句，其次取要点连句，最后取全文首句
-  let oneLiner = '';
-  if (comment) {
-    oneLiner = firstSentence(comment);
-  } else if (keyPoints.length > 0) {
-    oneLiner = firstSentence(keyPoints[0]);
-  } else {
-    oneLiner = firstSentence(aiText);   // stripMd 在 firstSentence 内调用，确保干净
+  // 最终兜底：如果仍然为空，从全文取第一句干净文字
+  if (!keyPoint) {
+    const clean = stripMd(aiText).replace(/\n+/g, ' ');
+    keyPoint = clean.slice(0, 60).trim();
   }
 
-  return { oneLiner, keyPoints, comment, chineseTranslation };
+  return { keyPoint, insight, chineseTranslation };
 }
 
 const ArticleDetailPage = () => {
@@ -200,10 +188,10 @@ const ArticleDetailPage = () => {
 
   // 解析 AI 分析内容
   const aiRaw = article.aiComment || article.aiSummary || '';
-  const { oneLiner, keyPoints, comment, chineseTranslation } = parseAIAnalysis(aiRaw);
+  const { keyPoint, insight, chineseTranslation } = parseAIAnalysis(aiRaw);
 
-  // 摘要：始终通过 stripMd 过滤，防止 ** 泄漏
-  const summaryText = stripMd(oneLiner || article.summary || '');
+  // 核心要点：始终过 stripMd，防止 ** 泄漏
+  const keyPointText = stripMd(keyPoint || article.summary || '');
 
   // 中文内容回退
   const chineseContent = chineseTranslation || article.content || '';
@@ -273,72 +261,46 @@ const ArticleDetailPage = () => {
         </div>
       </div>
 
-      {/* ── 栏目一：✨ 一句话摘要 ─────────────────────────── */}
-      {summaryText && (
-        <div className="mx-4 mb-4 px-4 py-4 bg-primary/5 rounded-2xl border border-primary/10">
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="text-base">✨</span>
-            <span className="text-xs font-bold text-primary uppercase tracking-wide">一句话摘要</span>
-          </div>
-          <p className="text-[15px] font-bold text-primary leading-relaxed">
-            {summaryText}
+      {/* ── 栏目一：核心要点 ──────────────────────────────── */}
+      {keyPointText && (
+        <div className="mx-4 mb-3 px-4 py-4 bg-primary/5 rounded-2xl border border-primary/10">
+          <p className="text-xs font-bold text-primary mb-2 tracking-wide">核心要点</p>
+          <p className="text-[15px] font-bold text-foreground leading-relaxed">
+            {keyPointText}
           </p>
         </div>
       )}
 
-      {/* ── 栏目二：🎯 智能总结 ──────────────────────────── */}
-      {(keyPoints.length > 0 || comment) && (
-        <div className="mx-4 mb-4 px-4 py-4 bg-card rounded-2xl border border-border shadow-card">
-          <div className="flex items-center gap-1.5 mb-3">
-            <span className="text-base">🎯</span>
-            <span className="text-xs font-bold text-foreground uppercase tracking-wide">智能总结</span>
-          </div>
-
-          {/* 核心要点段落 */}
-          {keyPoints.length > 0 && (
-            <p className="text-[14px] text-foreground leading-[1.75] mb-3">
-              {keyPoints
-                .map(p => p.replace(/^\[.*?\][：:]\s*/, '').replace(/[。]$/, '').trim())
-                .join('。') + '。'}
-            </p>
-          )}
-
-          {/* 划重点 */}
-          {comment && (
-            <div className="pt-3 border-t border-border/60">
-              <p className="text-[13px] text-muted-foreground leading-relaxed">
-                {comment}
-              </p>
-            </div>
-          )}
+      {/* ── 栏目二：深度解读 ──────────────────────────────── */}
+      {insight && (
+        <div className="mx-4 mb-3 px-4 py-4 bg-card rounded-2xl border border-border shadow-card">
+          <p className="text-xs font-bold text-foreground mb-2 tracking-wide">深度解读</p>
+          <p className="text-[14px] text-foreground/80 leading-[1.8]">
+            {insight}
+          </p>
         </div>
       )}
 
-      {/* ── 栏目三：原文内容 ────────────────────────────── */}
+      {/* ── 栏目三：原文 ──────────────────────────────────── */}
       <div className="mx-4 mb-12 px-4 py-4 bg-card rounded-2xl border border-border shadow-card">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-base">{getSourceIcon(article.sourceType)}</span>
-            <span className="text-xs font-bold text-foreground uppercase tracking-wide">原文内容</span>
-          </div>
+          <p className="text-xs font-bold text-foreground tracking-wide">原文</p>
           <motion.button
             onClick={() => window.open(article.url, '_blank')}
             className="flex items-center gap-1 px-3 py-1.5 bg-secondary rounded-full text-xs text-muted-foreground font-medium"
             whileTap={{ scale: 0.95 }}
           >
             <ExternalLink className="w-3 h-3" />
-            查看原文
+            跳转原文
           </motion.button>
         </div>
 
-        {/* 中文 / 原文切换 */}
+        {/* 中文翻译 / 英文原文 切换 */}
         <div className="flex gap-2 mb-4 p-1 bg-secondary rounded-full">
           <button
             onClick={() => setShowChinese(true)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-[13px] font-medium transition-all ${
-              showChinese
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground'
+              showChinese ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'
             }`}
           >
             <Languages className="w-3.5 h-3.5" />
@@ -347,12 +309,10 @@ const ArticleDetailPage = () => {
           <button
             onClick={() => setShowChinese(false)}
             className={`flex-1 py-1.5 rounded-full text-[13px] font-medium transition-all ${
-              !showChinese
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground'
+              !showChinese ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'
             }`}
           >
-            原文
+            英文原文
           </button>
         </div>
 
