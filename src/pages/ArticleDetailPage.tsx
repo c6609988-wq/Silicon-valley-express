@@ -264,7 +264,7 @@ const ArticleDetailPage = () => {
       {/* ── 栏目一：核心要点 ──────────────────────────────── */}
       {keyPointText && (
         <div className="mx-4 mb-3 px-4 py-4 bg-primary/5 rounded-2xl border border-primary/10">
-          <p className="text-xs font-bold text-primary mb-2 tracking-wide">核心要点</p>
+          <p className="text-sm font-bold text-primary mb-2">💡 核心要点</p>
           <p className="text-[15px] font-bold text-foreground leading-relaxed">
             {keyPointText}
           </p>
@@ -274,7 +274,7 @@ const ArticleDetailPage = () => {
       {/* ── 栏目二：深度解读 ──────────────────────────────── */}
       {insight && (
         <div className="mx-4 mb-3 px-4 py-4 bg-card rounded-2xl border border-border shadow-card">
-          <p className="text-xs font-bold text-foreground mb-2 tracking-wide">深度解读</p>
+          <p className="text-sm font-bold text-primary mb-2">🔍 深度解读</p>
           <p className="text-[14px] text-foreground/80 leading-[1.8]">
             {insight}
           </p>
@@ -284,7 +284,7 @@ const ArticleDetailPage = () => {
       {/* ── 栏目三：原文 ──────────────────────────────────── */}
       <div className="mx-4 mb-12 px-4 py-4 bg-card rounded-2xl border border-border shadow-card">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-xs font-bold text-foreground tracking-wide">原文</p>
+          <p className="text-sm font-bold text-primary">📄 原文</p>
           <motion.button
             onClick={() => window.open(article.url, '_blank')}
             className="flex items-center gap-1 px-3 py-1.5 bg-secondary rounded-full text-xs text-muted-foreground font-medium"
