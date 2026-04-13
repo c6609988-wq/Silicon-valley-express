@@ -265,7 +265,7 @@ const ArticleDetailPage = () => {
       {keyPointText && (
         <div className="mx-4 mb-3 px-4 py-4 bg-primary/5 rounded-2xl border border-primary/10">
           <p className="text-sm font-bold text-primary mb-2">💡 核心要点</p>
-          <p className="text-[15px] font-bold text-foreground leading-relaxed">
+          <p className="text-[15px] font-bold text-primary leading-relaxed" style={{ textShadow: '0 1px 2px rgba(255,255,255,0.8)' }}>
             {keyPointText}
           </p>
         </div>
