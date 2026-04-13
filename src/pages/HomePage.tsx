@@ -71,21 +71,18 @@ const HomePage = () => {
 
           {/* ── 顶部 Header ─────────────────────────────────────── */}
           <motion.header
-            className="sticky top-0 bg-background/95 backdrop-blur-sm z-30 safe-area-inset-top border-b border-border/60"
+            className="sticky top-0 bg-background/95 backdrop-blur-sm z-30 safe-area-inset-top"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="px-4 pt-4 pb-3">
+            <div className="px-4 pt-4 pb-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-bold tracking-[0.18em] text-primary uppercase">硅谷速递</span>
-                  <h1 className="text-[20px] font-bold text-foreground leading-tight mt-0.5">
-                    {greeting}，{mockUser.nickname} 👋
-                  </h1>
-                  <p className="text-xs text-muted-foreground mt-0.5">AI 为你精选今日科技资讯</p>
+                  <h1 className="text-xl font-bold text-foreground">{greeting}，{mockUser.nickname} 👋</h1>
+                  <p className="text-sm text-muted-foreground mt-0.5">为你整理了今日资讯</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-sm">
-                  <span className="text-sm font-bold text-primary-foreground">{mockUser.nickname.charAt(0)}</span>
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-bold text-foreground">{mockUser.nickname.charAt(0)}</span>
                 </div>
               </div>
             </div>
