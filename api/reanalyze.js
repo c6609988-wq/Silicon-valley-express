@@ -48,10 +48,20 @@ module.exports = async (req, res) => {
   const prompts = await getPrompts();
   let processed = 0;
   const results = [];
+  const debugInfo = [];
 
   for (const article of needsWork.slice(0, limit)) {
     const content = article.original_content || '';
-    if (!content || content.length < 10) continue;
+    debugInfo.push({
+      id: article.external_id,
+      author: article.author_name,
+      content_len: content.length,
+      has_translated: !!(article.translated_content),
+    });
+    if (!content || content.length < 10) {
+      console.log(`[Reanalyze] 跳过 ${article.author_name} - original_content太短(${content.length})`);
+      continue;
+    }
 
     const todayStr = (article.published_at || article.fetched_at || new Date().toISOString()).slice(0, 10);
 
@@ -96,5 +106,6 @@ module.exports = async (req, res) => {
     skipped: needsWork.length - processed,
     total_needing: needsWork.length,
     results,
+    debug: debugInfo,
   });
 };
