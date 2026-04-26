@@ -17,7 +17,7 @@ function getBeijingDateStr(date = new Date()) {
   return bj.toISOString().split('T')[0];
 }
 
-// 从 Supabase 读取某天的文章
+// 从 Supabase 读取某天的文章（用 fetched_at 筛选，避免推文发布日期不是今天的漏掉）
 async function loadFromDB(dateStr) {
   try {
     const start = new Date(dateStr + 'T00:00:00+08:00').toISOString();
@@ -25,11 +25,17 @@ async function loadFromDB(dateStr) {
     const { data, error } = await supabase
       .from('articles')
       .select('*')
-      .gte('published_at', start)
-      .lte('published_at', end)
-      .order('published_at', { ascending: false });
+      .gte('fetched_at', start)
+      .lte('fetched_at', end)
+      .order('fetched_at', { ascending: false });
     if (error || !data || data.length === 0) return null;
-    return data.map(dbRowToArticle);
+    // 优先展示有 AI 分析的文章
+    const sorted = [...data].sort((a, b) => {
+      const aHasAI = (a.ai_analysis || '').length > 50 ? 1 : 0;
+      const bHasAI = (b.ai_analysis || '').length > 50 ? 1 : 0;
+      return bHasAI - aHasAI;
+    });
+    return sorted.map(dbRowToArticle);
   } catch (e) {
     console.error('[Tweets] loadFromDB error:', e.message);
     return null;
@@ -69,24 +75,56 @@ async function saveToDB(articles) {
 // DB 行转换为前端 Article 格式
 function dbRowToArticle(item) {
   const raw = item.raw_data || {};
+  const aiText = item.ai_analysis || '';
+
+  // 解析 ai_analysis 文本为结构化数据（兼容 crawler.js 存的格式）
+  const parsed = aiText.length > 50
+    ? parseShortAnalysis(aiText, { name: item.author_name, handle: item.author_handle })
+    : null;
+
+  // 标题：优先用 AI 解析出的标题（非"今日动态"占位），其次 DB 里的 title
+  const title = (parsed?.title && !parsed.title.endsWith('今日动态'))
+    ? parsed.title
+    : (item.title || item.author_name || '');
+
+  // 中文内容：优先用 translated_content（真实翻译），其次 AI 解析出的翻译段，最后原文
+  const originalContent = item.original_content || '';
+  const translatedRaw = item.translated_content || '';
+  const hasRealTranslation = translatedRaw && translatedRaw !== originalContent && translatedRaw.length > 10;
+  const content = hasRealTranslation
+    ? translatedRaw
+    : (parsed?.chineseContent || translatedRaw || originalContent);
+
+  // AI 点评：优先 parsed.aiComment（从"二、划重点"提取），回退直接取 ai_analysis 全文
+  const aiComment = parsed?.aiComment || raw.aiComment
+    || (aiText.length > 50 ? aiText.replace(/###\s*[一二三四五][、.][^\n]*/g, '').trim().slice(0, 300) : '');
+
+  // 摘要：前两句话
+  const summary = parsed?.summary || raw.summary
+    || aiComment.split(/(?<=[。！？])\s*/).slice(0, 2).join('').slice(0, 150)
+    || title;
+
+  // 章节：优先 parsed.chapters，其次 raw.chapters
+  const chapters = parsed?.chapters?.length ? parsed.chapters : (raw.chapters || []);
+
   return {
     id: item.external_id || item.id,
-    title: item.title || item.author_name,
-    summary: raw.summary || item.ai_analysis?.slice(0, 150) || '',
-    content: item.translated_content || item.ai_analysis || '',
-    originalContent: item.original_content || '',
+    title,
+    summary,
+    content,
+    originalContent,
     sourceName: item.author_name,
     sourceHandle: item.author_handle,
     sourceIcon: '𝕏',
     sourceType: 'twitter',
-    publishTime: item.published_at,
-    readTime: Math.max(1, Math.ceil((item.ai_analysis || '').length / 400)),
+    publishTime: item.fetched_at || item.published_at,
+    readTime: Math.max(1, Math.ceil(aiText.length / 400)),
     isBookmarked: false,
-    url: item.link || '#',
+    url: item.link || (item.author_handle ? `https://x.com/${item.author_handle.replace('@', '')}` : '#'),
     score: raw.score || 0,
-    aiSummary: raw.aiComment || '',
-    aiComment: raw.aiComment || '',
-    chapters: raw.chapters || [],
+    aiSummary: aiComment,
+    aiComment,
+    chapters,
   };
 }
 

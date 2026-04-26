@@ -23,7 +23,7 @@ const ChannelDetailModal = ({ channel, onClose, onSubscribe, onFollowSource }: C
         onClick={onClose}
       >
         <motion.div
-          className="w-full max-w-[430px] mx-auto bg-background rounded-t-2xl max-h-[80vh] overflow-y-auto"
+          className="w-full max-w-[430px] mx-auto bg-background rounded-t-2xl max-h-[75vh] overflow-y-auto pb-20"
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}

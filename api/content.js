@@ -50,9 +50,20 @@ module.exports = async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   // format=articles → 返回前端格式（供首页使用）
+  // 策略：优先今天，无数据则兜底返回最近 50 条历史
   if (format === 'articles') {
-    const articles = (data || []).map(dbRowToArticle);
-    return res.json({ articles, total: count || 0 });
+    if (data && data.length > 0) {
+      const articles = data.map(dbRowToArticle);
+      return res.json({ articles, total: count || 0 });
+    }
+    // 今天无数据，取全库最新 50 条
+    const { data: fallback } = await supabase
+      .from('articles')
+      .select('*')
+      .order('published_at', { ascending: false })
+      .limit(50);
+    const articles = (fallback || []).map(dbRowToArticle);
+    return res.json({ articles, total: articles.length, fallback: true });
   }
 
   // 默认返回原始 DB 行（供详情页使用）

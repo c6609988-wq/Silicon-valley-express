@@ -21,7 +21,7 @@ const PullToRefresh = ({ children, onRefresh }: PullToRefreshProps) => {
   }, [isRefreshing, onRefresh]);
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative overflow-x-visible overflow-y-hidden" style={{ overflowX: 'clip' }}>
       <motion.div
         className="absolute top-0 left-0 right-0 flex items-center justify-center py-3 z-10"
         style={{ opacity }}

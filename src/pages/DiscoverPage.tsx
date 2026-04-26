@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Check, Flame, Sparkles, X } from 'lucide-react';
 import MobileLayout from '@/components/layout/MobileLayout';
@@ -11,60 +11,99 @@ import { mockChannels } from '@/data/mockData';
 import { Channel } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
-const categories = ['全部', 'AI 科技', '投资动态', '创业公司', '人物观点'];
-
 const DiscoverPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [channels, setChannels] = useState<Channel[]>(mockChannels);
   const [activeCategory, setActiveCategory] = useState('全部');
+
+  // 动态计算有内容的分类标签（去重 + 保留顺序），始终把「全部」放第一位
+  const categories = ['全部', ...Array.from(new Set(channels.map(ch => ch.category).filter(Boolean)))];
   const [isLoading, setIsLoading] = useState(false);
   const [showBanner, setShowBanner] = useState(true);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const { toast } = useToast();
 
+  // 收集所有已关注的 source ID，同步到后端
+  const syncFollowedSources = useCallback((updatedChannels: Channel[]) => {
+    const followedIds = updatedChannels
+      .flatMap(ch => ch.sources || [])
+      .filter(s => s.isFollowed)
+      .map(s => s.id);
+
+    // 存 localStorage（离线可用）
+    localStorage.setItem('followed_source_ids', JSON.stringify(followedIds));
+
+    // 同步到 Supabase
+    fetch('/api/sources/follow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ followedIds }),
+    }).catch(() => {});
+  }, []);
+
+  // 初始化时从后端加载关注状态（仅当后端有明确记录时才覆盖本地默认值）
+  useEffect(() => {
+    fetch('/api/sources/follow')
+      .then(r => r.json())
+      .then(({ followedIds }) => {
+        // followedIds 为 null 表示后端未设置过，保留本地默认值
+        if (!Array.isArray(followedIds)) return;
+        const idSet = new Set<string>(followedIds);
+        setChannels(prev => prev.map(ch => ({
+          ...ch,
+          isSubscribed: ch.sources?.some(s => idSet.has(s.id)) ?? false,
+          sources: ch.sources?.map(s => ({ ...s, isFollowed: idSet.has(s.id) })),
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSubscribe = (channelId: string) => {
-    setChannels(prev => 
-      prev.map(ch => 
-        ch.id === channelId 
-          ? { 
-              ...ch, 
-              isSubscribed: !ch.isSubscribed,
-              sources: ch.sources?.map(s => ({ ...s, isFollowed: !ch.isSubscribed }))
-            }
-          : ch
-      )
-    );
-    
     const channel = channels.find(ch => ch.id === channelId);
-    if (channel && !channel.isSubscribed) {
+    if (!channel) return;
+
+    const nextSubscribed = !channel.isSubscribed;
+
+    // 只调用一次 setChannels，避免两次调用互相抵消
+    setChannels(prev => {
+      const updated = prev.map(ch =>
+        ch.id === channelId
+          ? { ...ch, isSubscribed: nextSubscribed, sources: ch.sources?.map(s => ({ ...s, isFollowed: nextSubscribed })) }
+          : ch
+      );
+      syncFollowedSources(updated);
+      return updated;
+    });
+
+    if (nextSubscribed) {
       toast({
         title: "已关注",
         description: `你已成功关注「${channel.name}」的全部 ${channel.sources?.length || 0} 个信息源`,
       });
     }
-    
+
+    // 同步更新弹窗内的选中频道状态
     if (selectedChannel && selectedChannel.id === channelId) {
-      const updatedChannel = channels.find(ch => ch.id === channelId);
-      if (updatedChannel) {
-        setSelectedChannel({
-          ...updatedChannel,
-          isSubscribed: !updatedChannel.isSubscribed,
-          sources: updatedChannel.sources?.map(s => ({ ...s, isFollowed: !updatedChannel.isSubscribed }))
-        });
-      }
+      setSelectedChannel({
+        ...channel,
+        isSubscribed: nextSubscribed,
+        sources: channel.sources?.map(s => ({ ...s, isFollowed: nextSubscribed })),
+      });
     }
   };
 
   const handleFollowSource = (sourceId: string) => {
-    setChannels(prev =>
-      prev.map(ch => ({
+    setChannels(prev => {
+      const updated = prev.map(ch => ({
         ...ch,
         sources: ch.sources?.map(s =>
           s.id === sourceId ? { ...s, isFollowed: !s.isFollowed } : s
         )
-      }))
-    );
-    
+      }));
+      syncFollowedSources(updated);
+      return updated;
+    });
+
     if (selectedChannel) {
       setSelectedChannel({
         ...selectedChannel,
@@ -95,7 +134,7 @@ const DiscoverPage = () => {
           <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="搜索频道、博主..." />
         </div>
 
-        <div className="px-4 py-2">
+        <div className="py-2">
           <CategoryTabs categories={categories} active={activeCategory} onChange={setActiveCategory} />
         </div>
 
