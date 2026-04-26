@@ -97,6 +97,7 @@ module.exports = async (req, res) => {
       console.log(`[Reanalyze] ✓ ${article.author_name} 更新完成`);
     } catch (err) {
       console.error(`[Reanalyze] 失败 ${article.external_id}:`, err.message);
+      results.push({ id: article.external_id, author: article.author_name, error: err.message });
     }
   }
 
