@@ -286,7 +286,7 @@ const ArticleDetailPage = () => {
               label="摘要"
               color="#3B82F6"
             />
-            <p style={{ fontSize: 15, color: '#444', lineHeight: 1.75, margin: 0 }}>
+            <p style={{ fontSize: 15, color: '#1A73E8', fontWeight: 700, lineHeight: 1.75, margin: 0 }}>
               {summaryText.replace(/\*\*/g, '')}
             </p>
           </div>

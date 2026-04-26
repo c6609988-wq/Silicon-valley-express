@@ -54,12 +54,13 @@ async function saveToDB(articles) {
       title: a.title,
       original_content: a.originalContent || '',
       translated_content: a.content || '',
-      ai_analysis: a.aiSummary || '',
+      ai_analysis: a._aiAnalysisRaw || a.aiSummary || '',
       link: a.url,
       published_at: a.publishTime || new Date().toISOString(),
       raw_data: {
         chapters: a.chapters || [],
-        aiComment: a.aiComment || a.aiSummary || '',
+        aiComment: a.aiComment || '',
+        aiOneliner: a.aiSummary || '',   // 保存核心要点一句话，供 dbRowToArticle 回读
         score: a.score || 0,
         summary: a.summary || '',
       },
@@ -75,11 +76,18 @@ async function saveToDB(articles) {
 // DB 行转换为前端 Article 格式
 function dbRowToArticle(item) {
   const raw = item.raw_data || {};
-  const aiText = item.ai_analysis || '';
+  const originalContent = item.original_content || '';
+  const translatedRaw = item.translated_content || '';
 
-  // 解析 ai_analysis 文本为结构化数据（兼容 crawler.js 存的格式）
-  const parsed = aiText.length > 50
-    ? parseShortAnalysis(aiText, { name: item.author_name, handle: item.author_handle })
+  // ai_analysis 若为空，尝试从 translated_content 中恢复（旧版保存逻辑导致 DeepSeek 输出存在 translated_content 里）
+  const aiText = item.ai_analysis || '';
+  const looksLikeAI = (t) => t.length > 50 && (t.includes('核心要点') || t.includes('深度解读') || t.includes('一、'));
+  const analysisText = looksLikeAI(aiText) ? aiText
+    : (looksLikeAI(translatedRaw) ? translatedRaw : aiText);
+
+  // 解析 ai_analysis（或 translated_content 兜底）文本为结构化数据
+  const parsed = analysisText.length > 50
+    ? parseShortAnalysis(analysisText, { name: item.author_name, handle: item.author_handle })
     : null;
 
   // 标题：优先用 AI 解析出的标题（非"今日动态"占位），其次 DB 里的 title
@@ -87,20 +95,25 @@ function dbRowToArticle(item) {
     ? parsed.title
     : (item.title || item.author_name || '');
 
-  // 中文内容：优先用 translated_content（真实翻译），其次 AI 解析出的翻译段，最后原文
-  const originalContent = item.original_content || '';
-  const translatedRaw = item.translated_content || '';
-  const hasRealTranslation = translatedRaw && translatedRaw !== originalContent && translatedRaw.length > 10;
+  // 中文内容：若 translated_content 已经是 DeepSeek AI 输出（不是纯翻译），则取 parsed.chineseContent
+  const hasRealTranslation = translatedRaw && translatedRaw !== originalContent
+    && translatedRaw.length > 10 && !looksLikeAI(translatedRaw);
   const content = hasRealTranslation
     ? translatedRaw
     : (parsed?.chineseContent || translatedRaw || originalContent);
 
-  // AI 点评：优先 parsed.aiComment（从"二、划重点"提取），回退直接取 ai_analysis 全文
-  const aiComment = parsed?.aiComment || raw.aiComment
-    || (aiText.length > 50 ? aiText.replace(/###\s*[一二三四五][、.][^\n]*/g, '').trim().slice(0, 300) : '');
+  // 一句话摘要（核心要点）：优先 parsed.aiOneliner，其次 raw 中存的 aiOneliner
+  const aiOneliner = parsed?.aiOneliner || raw.aiOneliner || '';
 
-  // 摘要：前两句话
-  const summary = parsed?.summary || raw.summary
+  // 深度解读（深度解读段）：优先 parsed.aiComment，其次 raw.aiComment，最后截取全文
+  const aiComment = parsed?.aiComment || raw.aiComment
+    || (aiText.length > 50
+        ? aiText.replace(/核心要点|深度解读|原文翻译|###\s*[一二三四五][、.][^\n]*/g, '').trim().slice(0, 300)
+        : '');
+
+  // 摘要：优先展示一句话概括（中文），其次深度解读前两句，最后用标题兜底
+  const summary = (aiOneliner && /[一-鿿]/.test(aiOneliner) ? aiOneliner : '')
+    || parsed?.summary || raw.summary
     || aiComment.split(/(?<=[。！？])\s*/).slice(0, 2).join('').slice(0, 150)
     || title;
 
@@ -122,8 +135,8 @@ function dbRowToArticle(item) {
     isBookmarked: false,
     url: item.link || (item.author_handle ? `https://x.com/${item.author_handle.replace('@', '')}` : '#'),
     score: raw.score || 0,
-    aiSummary: aiComment,
-    aiComment,
+    aiSummary: aiOneliner || aiComment,   // 蓝色加粗摘要：优先一句话概括
+    aiComment,                             // 深度解读全文
     chapters,
   };
 }
@@ -135,8 +148,8 @@ module.exports = async (req, res) => {
   const count = Math.min(parseInt(req.query.count) || 6, 20);
   const todayStr = getBeijingDateStr();
 
-  // 命中内存缓存
-  if (cache && Date.now() - cacheTime < CACHE_TTL) {
+  // 命中内存缓存（?refresh=1 强制跳过缓存）
+  if (cache && cache.length > 0 && Date.now() - cacheTime < CACHE_TTL && !req.query.refresh) {
     return res.json({ tweets: cache.slice(0, count), cached: true });
   }
 
@@ -186,9 +199,10 @@ module.exports = async (req, res) => {
           isBookmarked: false,
           url: `https://x.com/${username}`,
           score: source.score,
-          aiSummary: parsed.aiComment,
+          aiSummary: parsed.aiOneliner || parsed.aiComment,   // 核心要点一句话
           aiComment: parsed.aiComment,
           chapters: parsed.chapters,
+          _aiAnalysisRaw: aiAnalysis,   // 保存完整 DeepSeek 输出到 ai_analysis 列
         };
       } catch (err) {
         console.error(`[Tweets] ${source.name} 失败:`, err.message);
@@ -214,25 +228,46 @@ module.exports = async (req, res) => {
 };
 
 function parseShortAnalysis(aiText, source) {
-  const keypointsMatch = aiText.match(/一[、.]\s*今日核心要点[\s\S]*?\n([\s\S]*?)(?=###\s*二|二[、.])/);
-  const keypointsText = keypointsMatch ? keypointsMatch[1].trim() : '';
+  // ── 生产环境格式（lib/prompts.js v4）: 无序号纯文本标题 ──
+  // 核心要点\n[一句话]\n\n深度解读\n[100-300字]\n\n原文翻译\n[翻译]
+  const keypointsMatch  = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n\n?深度解读|\n\n?原文翻译|$)/);
+  const commentMatch    = aiText.match(/深度解读\s*\n([\s\S]*?)(?=\n\n?原文翻译|$)/);
+  const translationMatch = aiText.match(/原文翻译\s*\n([\s\S]*?)$/);
+
+  // ── 旧本地格式（server/config/prompts.js）: 带序号 ──
+  const oldKeypointsMatch   = aiText.match(/一[、.]\s*[今日]*核心要点[\s\S]*?\n([\s\S]*?)(?=###\s*二|二[、.])/);
+  const oldCommentMatch     = aiText.match(/[二三][、.]\s*划重点[\s\S]*?\n([\s\S]*?)(?=###\s*[三四]|[三四][、.]|$)/);
+  const oldTranslationMatch = aiText.match(/[三四][、.]\s*原文翻译[\s\S]*?\n([\s\S]*?)$/);
+
+  const keypointsText = (keypointsMatch?.[1] || oldKeypointsMatch?.[1] || '').trim();
+  const aiComment     = (commentMatch?.[1]    || oldCommentMatch?.[1]    || '').trim();
+  const chineseContent = (translationMatch?.[1] || oldTranslationMatch?.[1] || aiText).trim();
+
+  // 生产格式：核心要点 = 单行一句话概括
+  const aiOneliner = keypointsText.split('\n')[0].trim();
+  const hasChineseOneliner = aiOneliner && /[一-鿿]/.test(aiOneliner);
+
+  // 旧格式：解析编号要点列表
   const keyPoints = keypointsText
     .split('\n').filter(l => /^\d+[.)、]/.test(l.trim()))
-    .map(l => l.replace(/^\d+[.)、]\s*/, '').trim()).filter(Boolean);
+    .map(l => l.replace(/^\d+[.)、]\s*/, '').replace(/\[.*?\][：:]\s*/, '').trim())
+    .filter(Boolean);
 
-  const commentMatch = aiText.match(/二[、.]\s*划重点[\s\S]*?\n([\s\S]*?)(?=###\s*三|三[、.]|$)/);
-  const aiComment = commentMatch ? commentMatch[1].trim() : '';
+  // 标题
+  const titleBase = (hasChineseOneliner ? aiOneliner.slice(0, 30) : '')
+    || (keyPoints[0]?.replace(/\[.*?\][：:]\s*/, '').slice(0, 30) || '');
+  const title = titleBase ? `${source.name}：${titleBase}` : `${source.name} 今日动态`;
 
-  const translationMatch = aiText.match(/三[、.]\s*原文翻译[\s\S]*?\n([\s\S]*?)$/);
-  const chineseContent = translationMatch ? translationMatch[1].trim() : aiText;
-
-  const firstPoint = keyPoints[0] || '';
-  const titleContent = firstPoint.replace(/\[.*?\][：:]\s*/, '').slice(0, 40);
-  const title = titleContent ? `${source.name}：${titleContent}` : `${source.name} 今日动态`;
-  const summary = aiComment.split(/(?<=[。！？])\s*/).slice(0, 2).join('').trim() || title;
+  // 卡片摘要：优先显示 aiOneliner（核心要点一句话），其次 aiComment 前两句
+  const summary = (hasChineseOneliner ? aiOneliner : '')
+    || aiComment.split(/(?<=[。！？])\s*/).slice(0, 2).join('').trim().slice(0, 150)
+    || title;
 
   return {
-    title, summary, aiComment,
+    title,
+    summary,
+    aiComment: aiComment || (hasChineseOneliner ? aiOneliner : ''),
+    aiOneliner: hasChineseOneliner ? aiOneliner : '',
     chineseContent,
     chapters: keyPoints.length > 0
       ? [{ id: '1', title: '今日核心要点', content: keypointsText, keyPoints }]

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, ChevronRight, Zap } from 'lucide-react';
+import { Check, ChevronRight, Zap, Sparkles, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mockChannels } from '@/data/mockData';
 
@@ -44,7 +44,8 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
             ))}
           </div>
 
-          {step === 0 ? (
+          {/* ── Step 0：欢迎页 ── */}
+          {step === 0 && (
             <motion.div
               className="flex-1 flex flex-col p-8"
               initial={{ opacity: 0, y: 20 }}
@@ -76,7 +77,10 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
                 </button>
               </div>
             </motion.div>
-          ) : (
+          )}
+
+          {/* ── Step 1：选择频道 ── */}
+          {step === 1 && (
             <motion.div
               className="flex-1 flex flex-col p-6"
               initial={{ opacity: 0, x: 20 }}
@@ -120,10 +124,86 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
 
               <div className="pt-4 pb-2 bg-background">
                 <Button
+                  onClick={() => setStep(2)}
+                  className="w-full h-12 rounded-xl text-base"
+                >
+                  {selectedChannels.length > 0
+                    ? `已选 ${selectedChannels.length} 个频道，继续`
+                    : '继续'}
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── Step 2：完成页 ── */}
+          {step === 2 && (
+            <motion.div
+              className="flex-1 flex flex-col p-8"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              <div className="flex-1 flex flex-col justify-center items-center text-center">
+                {/* 完成图标 */}
+                <motion.div
+                  className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6"
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+                >
+                  <Sparkles className="w-10 h-10 text-primary" />
+                </motion.div>
+
+                <motion.h1
+                  className="text-2xl font-bold text-foreground mb-3"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 }}
+                >
+                  一切就绪 🎉
+                </motion.h1>
+
+                <motion.p
+                  className="text-muted-foreground text-[15px] leading-relaxed mb-8"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.25 }}
+                >
+                  {selectedChannels.length > 0
+                    ? `已为你关注 ${selectedChannels.length} 个优质信息源，\nAI 每天帮你提炼重点。`
+                    : '硅谷速递已准备好，\nAI 每天帮你提炼硅谷重点动态。'}
+                </motion.p>
+
+                {/* 特性提示卡片 */}
+                <motion.div
+                  className="w-full space-y-3"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.35 }}
+                >
+                  {[
+                    { icon: '⚡', text: 'AI 自动抓取，每日两次更新' },
+                    { icon: '🌏', text: '英文内容自动翻译为中文' },
+                    { icon: '📌', text: '核心要点提炼，10 分钟读完' },
+                  ].map((item, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-muted/50"
+                    >
+                      <span className="text-xl">{item.icon}</span>
+                      <span className="text-sm text-foreground">{item.text}</span>
+                    </div>
+                  ))}
+                </motion.div>
+              </div>
+
+              <div className="mt-auto">
+                <Button
                   onClick={() => onComplete(selectedChannels)}
                   className="w-full h-12 rounded-xl text-base"
                 >
-                  {selectedChannels.length > 0 ? `关注 ${selectedChannels.length} 个频道，进入首页` : '直接进入首页'}
+                  进入首页，开始阅读
+                  <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </div>
             </motion.div>
