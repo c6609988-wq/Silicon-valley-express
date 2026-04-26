@@ -87,6 +87,41 @@ function NumBadge({ n }: { n: number }) {
   );
 }
 
+// ── 解析 ai_analysis 文本（生产格式 v4：核心要点/深度解读/原文翻译）────
+function parseAiAnalysis(aiText: string) {
+  if (!aiText || aiText.length < 30) return null;
+
+  const keypointsMatch  = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n\n?深度解读|\n\n?原文翻译|$)/);
+  const commentMatch    = aiText.match(/深度解读\s*\n([\s\S]*?)(?=\n\n?原文翻译|$)/);
+  const translationMatch = aiText.match(/原文翻译\s*\n([\s\S]*?)$/);
+
+  if (!keypointsMatch && !commentMatch) return null;
+
+  const rawOneliner = keypointsMatch?.[1]?.trim().split('\n')[0]?.trim().replace(/\*\*/g, '') || '';
+  const aiOneliner  = rawOneliner && /[一-鿿]/.test(rawOneliner) ? rawOneliner : '';
+  const aiComment   = commentMatch?.[1]?.trim().replace(/\*\*/g, '') || '';
+  const translationSection = translationMatch?.[1]?.trim() || '';
+
+  // 从原文翻译区块提取每条推文的中文翻译行，作为核心内容提炼要点
+  const keyPointLines: string[] = [];
+  if (translationSection) {
+    translationSection.split(/\n---+\n?/).forEach(block => {
+      const m = block.match(/翻译[：:]\s*([\s\S]+?)(?=\n原文:|$)/);
+      if (m && m[1].trim().length > 5) keyPointLines.push(m[1].trim());
+    });
+  }
+
+  const chineseContent = keyPointLines.length > 0
+    ? keyPointLines.join('\n\n')
+    : translationSection;
+
+  const keyPointChapters = keyPointLines.length > 0
+    ? [{ id: '1', title: '核心内容提炼', content: '', keyPoints: keyPointLines }]
+    : [];
+
+  return { aiOneliner, aiComment, chineseContent, keyPointChapters };
+}
+
 // ── 主页面 ────────────────────────────────────────────────
 const ArticleDetailPage = () => {
   const { id } = useParams();
@@ -111,11 +146,20 @@ const ArticleDetailPage = () => {
       .then(data => {
         const item = data.items?.[0];
         if (!item) throw new Error('文章未找到');
+        const parsed = parseAiAnalysis(item.ai_analysis || '');
+        const aiOneliner = parsed?.aiOneliner || '';
+        const aiComment  = parsed?.aiComment  || '';
+        // 中文展示内容：优先解析翻译段，其次 translated_content，最后原文
+        const chineseContent = parsed?.chineseContent
+          || (item.translated_content && item.translated_content !== item.original_content
+              ? item.translated_content
+              : '')
+          || item.original_content || '';
         setArticle({
           id: item.external_id || item.id,
           title: item.title || item.author_name,
-          summary: item.ai_analysis?.slice(0, 100) || '',
-          content: item.translated_content || item.ai_analysis || '',
+          summary: aiOneliner || '',
+          content: chineseContent,
           originalContent: item.original_content || '',
           sourceName: item.author_name,
           sourceHandle: item.author_handle,
@@ -125,8 +169,9 @@ const ArticleDetailPage = () => {
           readTime: Math.max(1, Math.ceil((item.ai_analysis || '').length / 400)),
           isBookmarked: false,
           url: item.link || '#',
-          aiSummary: item.ai_analysis?.slice(0, 200) || '',
-          chapters: [],
+          aiSummary: aiOneliner,    // 蓝色加粗：核心要点一句话
+          aiComment:  aiComment,    // 智能点评：深度解读段
+          chapters: parsed?.keyPointChapters || [],
         });
         setLoading(false);
       })
@@ -193,17 +238,15 @@ const ArticleDetailPage = () => {
   const hasKeyPoints = keyPoints.length > 0;
   const hasComment = !!article.aiComment;
 
-  // 智能点评：优先用 aiSummary（若与 summary 不同），否则取正文最后一段作为 AI 视角
-  const smartCommentText = (() => {
-    if (article.aiSummary && article.aiSummary !== article.summary && article.aiSummary.length > 20) {
-      return article.aiSummary;
-    }
-    // 从原文段落中取最后一段有内容的句子作为 AI 洞察
-    const paras = rawBody.split(/\n+/).map(s => s.trim()).filter(s => s.length > 20);
-    if (paras.length > 1) return paras[paras.length - 1];
-    if (paras.length === 1 && paras[0] !== summaryText) return paras[0];
-    return '';
-  })();
+  // 智能点评：优先用 aiComment（深度解读段），其次从正文兜底
+  const smartCommentText = article.aiComment && article.aiComment.length > 20
+    ? article.aiComment
+    : (() => {
+        const paras = rawBody.split(/\n+/).map((s: string) => s.trim()).filter((s: string) => s.length > 20);
+        if (paras.length > 1) return paras[paras.length - 1];
+        if (paras.length === 1 && paras[0] !== summaryText) return paras[0];
+        return '';
+      })();
   const hasSmartComment = !!smartCommentText;
 
   const displayContent = showChinese ? article.content : (article.originalContent || article.content);
