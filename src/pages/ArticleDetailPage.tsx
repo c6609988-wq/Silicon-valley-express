@@ -8,7 +8,6 @@ import {
   Share2,
   FileText,
   AlignLeft,
-  MessageSquare,
   Sparkles,
   Languages,
   Loader2,
@@ -396,33 +395,7 @@ const ArticleDetailPage = () => {
           </>
         )}
 
-        {/* ══════════════════════════════════════════
-            区块四：独家评论（橙色亮色卡片）
-        ══════════════════════════════════════════ */}
-        {hasComment && (
-          <>
-            {(hasKeyPoints || hasSmartComment) && (
-              <div style={{ height: 1, background: '#EBEBEB', marginBottom: 24 }} />
-            )}
-            <div style={{
-              background: '#FFF7ED',
-              border: '1px solid #FED7AA',
-              borderRadius: 16,
-              padding: '16px 18px',
-              marginBottom: 24,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-                <MessageSquare style={{ width: 15, height: 15, color: '#EA7316' }} />
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#EA7316' }}>独家评论</span>
-              </div>
-              <p style={{ fontSize: 14, color: '#555', lineHeight: 1.75, margin: 0 }}>
-                {article.aiComment?.replace(/\*\*/g, '')}
-              </p>
-            </div>
-          </>
-        )}
-
-        {(hasSummary || hasKeyPoints || hasSmartComment || hasComment) && (
+        {(hasSummary || hasKeyPoints || hasSmartComment) && (
           <div style={{ height: 1, background: '#EBEBEB', marginBottom: 24 }} />
         )}
 
