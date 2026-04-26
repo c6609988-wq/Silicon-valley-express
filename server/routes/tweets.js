@@ -2,10 +2,11 @@
 const express = require('express');
 const router = express.Router();
 const { getUserTweets } = require('../api/tikhub');
-const { analyzeContent } = require('../api/openrouter');
+const { analyzeContent, callAI } = require('../api/openrouter');
 const { SHORT_CONTENT_PROMPT } = require('../config/prompts');
 const presets = require('../config/presets');
 const { setCachedArticles, getCachedArticles } = require('../services/articleCache');
+const { supabase } = require('../db');
 
 // GET /api/tweets/latest?count=6
 // 从预设 X 博主名单各取最新推文，AI 分析后按 score 排序返回
@@ -17,6 +18,122 @@ router.get('/latest', async (req, res) => {
   if (cached) {
     console.log('[Tweets] 命中缓存，直接返回');
     return res.json({ tweets: cached.slice(0, count) });
+  }
+
+  // 无缓存时先从 Supabase 读取历史数据，确保首页不为空
+  try {
+    const { data: dbRows, error: dbErr } = await supabase
+      .from('articles')
+      .select('*')
+      .order('published_at', { ascending: false })
+      .limit(count * 8);
+
+    if (!dbErr && dbRows && dbRows.length > 0) {
+      console.log(`[Tweets] 从 Supabase 加载 ${dbRows.length} 条历史数据`);
+
+      // 按 author_name 分组，每个来源只保留最新一条（去重）
+      const byAuthor = new Map();
+      for (const row of dbRows) {
+        const key = row.author_name || row.id;
+        if (!byAuthor.has(key)) byAuthor.set(key, row);
+      }
+
+      const rows = Array.from(byAuthor.values()).slice(0, count);
+
+      // 第一步：先构建基础字段（同步）
+      const baseArticles = rows.map(row => {
+        const platformIcon = row.platform === 'youtube' ? '▶' : row.platform === 'rss' ? '📰' : '𝕏';
+        const sourceObj = { name: row.author_name || '未知来源', handle: '', score: 5 };
+
+        let displayContent = '';
+        let aiSummary = '';
+        let aiComment = '';
+        let chapters = [];
+        let parsedTitle = '';
+
+        if (row.ai_analysis) {
+          const parsed = row.content_type === 'long'
+            ? parseLongAnalysis(row.ai_analysis, sourceObj)
+            : parseShortAnalysis(row.ai_analysis, sourceObj);
+          displayContent = parsed.chineseContent;
+          aiSummary = parsed.aiSummary;
+          aiComment = parsed.aiComment;
+          chapters = parsed.chapters;
+          parsedTitle = parsed.title || '';
+        } else {
+          displayContent = row.translated_content || row.original_content || '';
+        }
+
+        const bodyText = displayContent || row.original_content || '';
+        const summary = bodyText.replace(/\n+/g, ' ').slice(0, 100).trim();
+        const rawTitle = row.title || '';
+        const isDbPlaceholder = !rawTitle || /·\s*\d{4}-\d{2}-\d{2}/.test(rawTitle);
+        const isParsedPlaceholder = !parsedTitle || /今日动态$/.test(parsedTitle);
+
+        // 英文原文第一句（用于批量翻译降级）
+        const firstLine = (row.original_content || '')
+          .split(/[。！？\n.!?]/)[0]
+          .replace(/https?:\/\/\S+/g, '')
+          .trim()
+          .slice(0, 120);
+
+        // 标题优先级：AI 解析真实标题 > 数据库已有中文标题 > 英文首句
+        const resolvedTitle = !isParsedPlaceholder
+          ? parsedTitle
+          : (!isDbPlaceholder ? rawTitle : (firstLine || rawTitle));
+
+        return {
+          id: row.external_id || String(row.id),
+          title: resolvedTitle,
+          _needsTranslation: isParsedPlaceholder && isDbPlaceholder && !!firstLine,
+          _firstLine: firstLine,
+          summary,
+          content: bodyText,
+          originalContent: row.original_content || '',
+          sourceType: row.platform || 'twitter',
+          sourceName: row.author_name || '',
+          sourceHandle: '',
+          sourceIcon: platformIcon,
+          publishTime: row.published_at,
+          readTime: Math.max(1, Math.ceil(bodyText.length / 400)),
+          isBookmarked: false,
+          url: row.link || '',
+          score: 5,
+          aiSummary,
+          aiComment,
+          chapters,
+        };
+      });
+
+      // 第二步：批量翻译需要中文标题的条目（一次 AI 调用）
+      const toTranslate = baseArticles.filter(a => a._needsTranslation);
+      if (toTranslate.length > 0) {
+        try {
+          const numbered = toTranslate
+            .map((a, i) => `${i + 1}. ${a._firstLine}`)
+            .join('\n');
+          const raw = await callAI(
+            '你是新闻标题翻译专家。将下列每条英文内容翻译为简洁的中文新闻标题，15字以内，保留专有名词（GPT、Claude等）。按原编号逐行输出，格式：1. 标题\n2. 标题，不要多余说明。',
+            numbered
+          );
+          const lines = raw.split('\n').map(l => l.replace(/^\d+[.)、]\s*/, '').trim()).filter(Boolean);
+          toTranslate.forEach((a, i) => {
+            if (lines[i]) a.title = lines[i].slice(0, 40);
+          });
+          console.log('[Tweets] 批量标题翻译完成');
+        } catch (e) {
+          console.warn('[Tweets] 标题翻译失败，保留英文原句:', e.message);
+        }
+      }
+
+      // 清理临时字段
+      const dbArticles = baseArticles.map(({ _needsTranslation, _firstLine, ...a }) => a);
+
+      setCachedArticles(dbArticles);
+      return res.json({ tweets: dbArticles });
+    }
+  } catch (dbFetchErr) {
+    console.warn('[Tweets] Supabase 回退查询失败:', dbFetchErr.message);
   }
 
   console.log('[Tweets] 开始实时抓取 + AI 分析...');
@@ -125,16 +242,31 @@ function isImageOnly(tweet) {
   );
 }
 
-// 解析短信息 AI 输出（推文聚合格式）
+// 解析短信息 AI 输出（V3 推文聚合格式）
 function parseShortAnalysis(aiText, source) {
   // 提取「一、今日核心要点」
   const keypointsMatch = aiText.match(/一[、.]\s*今日核心要点[\s\S]*?\n([\s\S]*?)(?=###\s*二|二[、.])/);
   const keypointsText = keypointsMatch ? keypointsMatch[1].trim() : '';
-  const keyPoints = keypointsText
-    .split('\n')
-    .filter(l => /^\d+[.)、]/.test(l.trim()))
-    .map(l => l.replace(/^\d+[.)、]\s*/, '').trim())
-    .filter(Boolean);
+
+  // V3 格式：每条要点由「编号行 + 说明：行」组成，合并为一个 keyPoint
+  const keyPoints = [];
+  const lines = keypointsText.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (/^\d+[.)、]/.test(line)) {
+      const headline = line.replace(/^\d+[.)、]\s*/, '').trim();
+      // 看下一行是否是"说明："
+      const nextLine = (lines[i + 1] || '').trim();
+      const explain = nextLine.startsWith('说明：') || nextLine.startsWith('说明:')
+        ? nextLine.replace(/^说明[：:]/, '').trim()
+        : '';
+      keyPoints.push(explain ? `${headline}（${explain}）` : headline);
+      i += explain ? 2 : 1;
+    } else {
+      i++;
+    }
+  }
 
   // 提取「二、划重点」
   const commentMatch = aiText.match(/二[、.]\s*划重点[\s\S]*?\n([\s\S]*?)(?=###\s*三|三[、.]|$)/);
@@ -166,28 +298,66 @@ function parseShortAnalysis(aiText, source) {
   };
 }
 
-// 解析长信息 AI 输出（结构化文章格式）
+// 解析长信息 AI 输出（V3 结构化文章格式）
 function parseLongAnalysis(aiText, source) {
-  // 标题：找第一行有意义的文本
+  // ── 一、标题 ──────────────────────────────────────────────
   let title = `${source.name} 深度解析`;
-  const lines = aiText.split('\n').map(l => l.trim()).filter(Boolean);
-  for (const line of lines.slice(0, 15)) {
-    const cleaned = line.replace(/^[#*\s【】一二三四五六七八九十、.]+/, '').trim();
-    if (cleaned.length > 8 && cleaned.length < 80) {
-      title = cleaned;
-      break;
+  const titleSecMatch = aiText.match(/一[、.]\s*文章标题\s*\n+([\s\S]*?)(?=\n###|\n##|\n\n###)/);
+  if (titleSecMatch) {
+    const t = titleSecMatch[1].trim().replace(/^[#*>\s]+/, '').split('\n')[0].trim();
+    if (t.length >= 6 && t.length <= 80) title = t;
+  } else {
+    // 降级：扫前15行找有意义标题
+    const lines = aiText.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const line of lines.slice(0, 15)) {
+      const cleaned = line.replace(/^[#*\s【】一二三四五六七八九十、.]+/, '').trim();
+      if (cleaned.length > 8 && cleaned.length < 80) { title = cleaned; break; }
     }
   }
 
-  // 引言/摘要：第一个非标题段落
-  const introMatch = aiText.match(/二[、.]\s*引言[\s\S]*?\n([\s\S]*?)(?=###\s*三|三[、.])/);
+  // ── 二、引言 ──────────────────────────────────────────────
+  const introMatch = aiText.match(/二[、.]\s*引言\s*\n([\s\S]*?)(?=\n###\s*三|\n三[、.])/);
   const firstPara = aiText.split('\n\n').find(p => p.trim().length > 30 && !p.trim().startsWith('#'));
   const rawSummary = introMatch ? introMatch[1].trim() : (firstPara || title);
-  const summary = rawSummary.replace(/[#*]/g, '').slice(0, 120);
+  const summary = rawSummary.replace(/[#*>]/g, '').replace(/\n+/g, ' ').slice(0, 200);
 
-  // 朋克张思考
-  const punkMatch = aiText.match(/四[、.]\s*朋克张[^#\n]*思考([\s\S]*?)(?=###\s*五|五[、.]|信息来源|📎|$)/);
-  const aiComment = punkMatch ? punkMatch[1].trim().slice(0, 500) : '';
+  // ── 三、核心内容提炼 → chapters ───────────────────────────
+  const chaptersSectionMatch = aiText.match(/三[、.]\s*核心内容提炼([\s\S]*?)(?=\n###\s*四|\n四[、.])/);
+  const chapters = [];
+  if (chaptersSectionMatch) {
+    // 按 #### N. 或 #### N、 切章节
+    const blocks = chaptersSectionMatch[1].split(/\n####\s+/).filter(b => b.trim());
+    blocks.forEach((block, idx) => {
+      const blockLines = block.split('\n');
+      // 章节标题：第一行去掉序号
+      const rawChTitle = blockLines[0].replace(/^\d+[.、]\s*/, '').trim();
+      if (!rawChTitle) return;
+
+      // 提取子要点：**标题**\n内容段落
+      const keyPoints = [];
+      const subMatches = [...block.matchAll(/\*\*([^*\n]+)\*\*\s*\n([\s\S]*?)(?=\n\*\*|\n####|$)/g)];
+      subMatches.forEach(m => {
+        const ptTitle = m[1].trim();
+        const ptBody = m[2].replace(/\n+/g, ' ').trim().slice(0, 120);
+        if (ptTitle) keyPoints.push(ptBody ? `${ptTitle}：${ptBody}` : ptTitle);
+      });
+
+      // 章节正文（清理 markdown 标记）
+      const content = block
+        .split('\n').slice(1).join('\n')
+        .replace(/\*\*/g, '')
+        .trim();
+
+      chapters.push({ id: String(idx + 1), title: rawChTitle, content, keyPoints });
+    });
+  }
+
+  // ── 四、独家批注 ──────────────────────────────────────────
+  const commentMatch = aiText.match(/四[、.]\s*独家批注\s*\n([\s\S]*?)(?=\n###\s*五|\n五[、.]|$)/);
+  // 兼容旧版"朋克张"字段
+  const punkMatch = aiText.match(/四[、.]\s*朋克张[^#\n]*思考([\s\S]*?)(?=\n###\s*五|\n五[、.]|信息来源|📎|$)/);
+  const rawComment = commentMatch ? commentMatch[1] : (punkMatch ? punkMatch[1] : '');
+  const aiComment = rawComment.trim().replace(/^[\n\s]+/, '').slice(0, 600);
 
   return {
     title,
@@ -195,7 +365,7 @@ function parseLongAnalysis(aiText, source) {
     aiSummary: summary,
     aiComment,
     chineseContent: aiText,
-    chapters: [],
+    chapters,
   };
 }
 

@@ -75,18 +75,22 @@ const HomePage = () => {
         <PullToRefresh onRefresh={handleRefresh}>
           {/* 顶部问候语 */}
           <motion.header
-            className="sticky top-0 bg-background/95 backdrop-blur-sm z-30 safe-area-inset-top"
+            className="sticky top-0 z-30 safe-area-inset-top"
+            style={{ background: 'rgba(245,247,250,0.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #EAEAEA' }}
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="px-4 pt-4 pb-2">
+            <div className="px-4 pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-xl font-bold text-foreground">{greeting}，{mockUser.nickname} 👋</h1>
-                  <p className="text-sm text-muted-foreground mt-0.5">为你整理了今日资讯</p>
+                  <h1 className="text-xl font-bold" style={{ color: '#111' }}>{greeting}，{mockUser.nickname} 👋</h1>
+                  <p className="text-sm mt-0.5" style={{ color: '#999' }}>为你整理了今日资讯</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-bold text-foreground">{mockUser.nickname.charAt(0)}</span>
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center"
+                  style={{ background: '#1A73E8' }}
+                >
+                  <span className="text-sm font-bold text-white">{mockUser.nickname.charAt(0)}</span>
                 </div>
               </div>
             </div>
@@ -113,11 +117,11 @@ const HomePage = () => {
             ) : (
               grouped.map(({ dateKey, dateLabel, items }) => (
                 <div key={dateKey} className="mb-6">
-                  {/* 灰色日期分隔线 */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="h-px flex-1 bg-border" />
-                    <span className="text-xs text-muted-foreground font-medium px-1">{dateLabel}</span>
-                    <div className="h-px flex-1 bg-border" />
+                  {/* 日期分隔线 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <div style={{ flex: 1, height: 1, background: '#E8EAED' }} />
+                    <span style={{ fontSize: 12, color: '#999', fontWeight: 500, padding: '0 4px' }}>{dateLabel}</span>
+                    <div style={{ flex: 1, height: 1, background: '#E8EAED' }} />
                   </div>
                   {/* 该日期下的文章 */}
                   <div className="space-y-4">
