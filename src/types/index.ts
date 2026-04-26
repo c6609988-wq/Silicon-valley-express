@@ -25,6 +25,21 @@ export interface Channel {
   tags?: string[];
 }
 
+// 内容分类枚举
+export type ContentCategory =
+  | 'deep_analysis'
+  | 'investment_signal'
+  | 'product_signal'
+  | 'technical_insight'
+  | 'news'
+  | 'founder_note'
+  | 'low_value'
+  | 'irrelevant'
+  | '';
+
+// 展示优先级
+export type ContentPriority = 'high' | 'medium' | 'low' | 'discard';
+
 // 文章类型
 export interface Article {
   id: string;
@@ -45,6 +60,13 @@ export interface Article {
   aiSummary?: string;
   aiComment?: string;
   chapters?: Chapter[];
+  // AI 过滤流水线字段
+  score?: number;
+  contentCategory?: ContentCategory;
+  contentTypeLabel?: string;
+  priority?: ContentPriority;
+  priorityWeight?: number;
+  isHighlight?: boolean;
 }
 
 // 章节类型（用于 AI 分析）

@@ -25,6 +25,7 @@ router.get('/latest', async (req, res) => {
     const { data: dbRows, error: dbErr } = await supabase
       .from('articles')
       .select('*')
+      .or('is_visible.is.null,is_visible.eq.true')
       .order('published_at', { ascending: false })
       .limit(count * 8);
 
@@ -105,10 +106,20 @@ router.get('/latest', async (req, res) => {
           readTime: Math.max(1, Math.ceil(bodyText.length / 400)),
           isBookmarked: false,
           url: row.link || '',
-          score: 5,
+          score: row.quality_score || 5,
           aiSummary,
           aiComment,
           chapters,
+          // AI 过滤流水线字段
+          contentCategory:  row.content_category || '',
+          contentTypeLabel: ({
+            deep_analysis: '深度分析', investment_signal: '投资信号',
+            product_signal: '产品信号', technical_insight: '技术洞察',
+            news: '快讯', founder_note: '创始人',
+          })[row.content_category] || '',
+          priority:       row.priority || 'medium',
+          priorityWeight: ({ high: 3, medium: 2, low: 1, discard: 0 })[row.priority] ?? 1,
+          isHighlight:    row.priority === 'high' && ['deep_analysis', 'investment_signal'].includes(row.content_category),
         };
       });
 
@@ -230,7 +241,10 @@ router.get('/latest', async (req, res) => {
   const articles = results
     .filter(r => r.status === 'fulfilled' && r.value)
     .map(r => r.value)
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) =>
+      ((b.priorityWeight ?? 1) - (a.priorityWeight ?? 1)) ||
+      (b.score - a.score)
+    );
 
   setCachedArticles(articles);
   res.json({ tweets: articles.slice(0, count) });

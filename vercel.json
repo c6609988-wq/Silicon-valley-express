@@ -22,7 +22,8 @@
     "api/trigger.js": { "maxDuration": 300 },
     "api/health.js": { "maxDuration": 10 },
     "api/sources/follow.js": { "maxDuration": 10 },
-    "api/reanalyze.js": { "maxDuration": 300 }
+    "api/reanalyze.js": { "maxDuration": 300 },
+    "api/migrate.js":   { "maxDuration": 60 }
   },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }

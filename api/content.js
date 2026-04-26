@@ -19,11 +19,30 @@ function extractComment(aiText = '') {
   return m ? m[1].trim().replace(/\*\*/g, '') : '';
 }
 
+/** content_type → 展示标签映射 */
+const CONTENT_TYPE_LABELS = {
+  deep_analysis:     '深度分析',
+  investment_signal: '投资信号',
+  product_signal:    '产品信号',
+  technical_insight: '技术洞察',
+  news:              '快讯',
+  founder_note:      '创始人',
+  low_value:         '',
+  irrelevant:        '',
+};
+
+/** priority 数字权重（用于前端排序） */
+const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1, discard: 0 };
+
 function dbRowToArticle(item) {
   const raw        = item.raw_data || {};
   const aiText     = item.ai_analysis || '';
   const aiOneliner = raw.aiOneliner || extractOneliner(aiText);
   const aiComment  = raw.aiComment  || extractComment(aiText);
+
+  const contentCategory = item.content_category || raw.content_type || '';
+  const priority        = item.priority || 'medium';
+  const qualityScore    = item.quality_score || raw.score || 0;
 
   return {
     id:             item.external_id || item.id,
@@ -39,10 +58,16 @@ function dbRowToArticle(item) {
     readTime:       Math.max(1, Math.ceil(aiText.length / 400)),
     isBookmarked:   false,
     url:            item.link || '#',
-    score:          raw.score || 0,
+    score:          qualityScore,
     aiSummary:      aiOneliner,
     aiComment:      aiComment,
     chapters:       raw.chapters || [],
+    // 新增：内容分类 & 优先级展示字段
+    contentCategory,
+    contentTypeLabel: CONTENT_TYPE_LABELS[contentCategory] || '',
+    priority,
+    priorityWeight:   PRIORITY_WEIGHT[priority] ?? 1,
+    isHighlight:      priority === 'high' && ['deep_analysis', 'investment_signal'].includes(contentCategory),
   };
 }
 
@@ -60,6 +85,8 @@ module.exports = async (req, res) => {
   let query = supabase
     .from('articles')
     .select('*', { count: 'exact' })
+    // 优先展示 is_visible=true 的内容（旧数据无此字段时也显示）
+    .or('is_visible.is.null,is_visible.eq.true')
     .order('published_at', { ascending: false })
     .range(offset, offset + l - 1);
 
@@ -73,16 +100,28 @@ module.exports = async (req, res) => {
   // 策略：优先今天，无数据则兜底返回最近 50 条历史
   if (format === 'articles') {
     if (data && data.length > 0) {
-      const articles = data.map(dbRowToArticle);
+      let articles = data.map(dbRowToArticle);
+      // 按优先级降序 → 质量分降序 → 时间降序
+      articles.sort((a, b) =>
+        (b.priorityWeight - a.priorityWeight) ||
+        (b.score - a.score) ||
+        (new Date(b.publishTime) - new Date(a.publishTime))
+      );
       return res.json({ articles, total: count || 0 });
     }
     // 今天无数据，取全库最新 50 条
     const { data: fallback } = await supabase
       .from('articles')
       .select('*')
+      .or('is_visible.is.null,is_visible.eq.true')
       .order('published_at', { ascending: false })
       .limit(50);
-    const articles = (fallback || []).map(dbRowToArticle);
+    let articles = (fallback || []).map(dbRowToArticle);
+    articles.sort((a, b) =>
+      (b.priorityWeight - a.priorityWeight) ||
+      (b.score - a.score) ||
+      (new Date(b.publishTime) - new Date(a.publishTime))
+    );
     return res.json({ articles, total: articles.length, fallback: true });
   }
 
