@@ -3,26 +3,46 @@
 // ?source_id=xxx    → 按来源过滤（供详情页回退使用）
 const { supabase } = require('../lib/supabase');
 
+/** 从 ai_analysis 提取"核心要点"一句话（去掉标题行） */
+function extractOneliner(aiText = '') {
+  const m = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n\n?深度解读|\n\n?原文翻译|$)/);
+  if (m) return m[1].trim().split('\n')[0].trim().replace(/\*\*/g, '');
+  // 旧格式兜底：去掉标题行取第一句
+  return aiText
+    .replace(/核心要点|深度解读|原文翻译|#{1,3}\s.+/g, '')
+    .trim().split('\n').find(l => l.trim().length > 5) || '';
+}
+
+/** 从 ai_analysis 提取"深度解读"段 */
+function extractComment(aiText = '') {
+  const m = aiText.match(/深度解读\s*\n([\s\S]*?)(?=\n\n?原文翻译|$)/);
+  return m ? m[1].trim().replace(/\*\*/g, '') : '';
+}
+
 function dbRowToArticle(item) {
-  const raw = item.raw_data || {};
+  const raw        = item.raw_data || {};
+  const aiText     = item.ai_analysis || '';
+  const aiOneliner = raw.aiOneliner || extractOneliner(aiText);
+  const aiComment  = raw.aiComment  || extractComment(aiText);
+
   return {
-    id: item.external_id || item.id,
-    title: item.title || item.author_name,
-    summary: raw.summary || item.ai_analysis?.slice(0, 150) || '',
-    content: item.translated_content || item.ai_analysis || '',
+    id:             item.external_id || item.id,
+    title:          item.title || item.author_name,
+    summary:        aiOneliner || raw.summary || aiText.slice(0, 100) || '',
+    content:        item.translated_content || aiText || '',
     originalContent: item.original_content || '',
-    sourceName: item.author_name,
-    sourceHandle: item.author_handle,
-    sourceIcon: item.platform === 'x' ? '𝕏' : item.platform === 'youtube' ? '▶️' : '📰',
-    sourceType: item.platform === 'x' ? 'twitter' : item.platform,
-    publishTime: item.published_at,
-    readTime: Math.max(1, Math.ceil((item.ai_analysis || '').length / 400)),
-    isBookmarked: false,
-    url: item.link || '#',
-    score: raw.score || 0,
-    aiSummary: raw.aiComment || '',
-    aiComment: raw.aiComment || '',
-    chapters: raw.chapters || [],
+    sourceName:     item.author_name,
+    sourceHandle:   item.author_handle,
+    sourceIcon:     item.platform === 'x' ? '𝕏' : item.platform === 'youtube' ? '▶️' : '📰',
+    sourceType:     item.platform === 'x' ? 'twitter' : item.platform,
+    publishTime:    item.fetched_at || item.published_at,
+    readTime:       Math.max(1, Math.ceil(aiText.length / 400)),
+    isBookmarked:   false,
+    url:            item.link || '#',
+    score:          raw.score || 0,
+    aiSummary:      aiOneliner,
+    aiComment:      aiComment,
+    chapters:       raw.chapters || [],
   };
 }
 
