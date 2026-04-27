@@ -45,6 +45,21 @@ const CATEGORY_BADGE: Record<string, { label: string; bg: string; color: string;
   founder_note:      { label: '创始人',  bg: '#FFF9C4', color: '#F57F17', border: '#FFF176' },
 };
 
+// summary ≤20字全部保留；>20字在15-20字范围内找自然标点断句，找不到则截取20字
+const extractHeadline = (text: string): string => {
+  if (!text) return '';
+  if (text.length <= 20) return text;
+  const match = text.match(/^[\s\S]{15,20}?[，。！？；、]/);
+  if (match) return match[0];
+  return text.slice(0, 20) + '…';
+};
+
+const getArticleHeadline = (article: Article): string => {
+  if (article.aiSummary) return extractHeadline(article.aiSummary);
+  if (article.summary) return extractHeadline(article.summary);
+  return article.title;
+};
+
 const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {
   const navigate = useNavigate();
 
@@ -134,7 +149,7 @@ const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {
         display: '-webkit-box', WebkitLineClamp: 2,
         WebkitBoxOrient: 'vertical', overflow: 'hidden',
       }}>
-        {article.title}
+        {getArticleHeadline(article)}
       </h3>
 
       {/* 摘要 */}

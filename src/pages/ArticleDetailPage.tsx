@@ -297,7 +297,11 @@ const ArticleDetailPage = () => {
 
         {/* ── 文章标题 ── */}
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111', lineHeight: 1.35, margin: '0 0 20px' }}>
-          {article.title}
+          {article.aiSummary
+            ? (article.aiSummary.length <= 20 ? article.aiSummary : (article.aiSummary.match(/^[\s\S]{15,20}?[，。！？；、]/)?.[0] ?? article.aiSummary.slice(0, 20) + '…'))
+            : article.summary
+              ? (article.summary.length <= 20 ? article.summary : (article.summary.match(/^[\s\S]{15,20}?[，。！？；、]/)?.[0] ?? article.summary.slice(0, 20) + '…'))
+              : article.title}
         </h1>
 
         {/* ── 作者信息行 ── */}
