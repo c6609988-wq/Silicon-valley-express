@@ -1,39 +1,13 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Article } from '@/types';
+import { PlatformIcon, platformLabel } from '@/components/common/PlatformIcon';
+import { extractHeadline } from '@/lib/utils';
 
 interface ArticleCardProps {
   article: Article;
   index?: number;
 }
-
-// 平台图标
-const PlatformIcon = ({ type }: { type: string }) => {
-  if (type === 'twitter' || type === 'x') {
-    return (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="#1A73E8" style={{ borderRadius: 2, flexShrink: 0 }}>
-        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.259 5.631 5.905-5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-      </svg>
-    );
-  }
-  if (type === 'youtube') {
-    return (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="#1A73E8" style={{ borderRadius: 2, flexShrink: 0 }}>
-        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="#1A73E8" style={{ borderRadius: 2, flexShrink: 0 }}>
-      <path d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19.01 7.38 20 6.18 20C4.98 20 4 19.01 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1z" />
-    </svg>
-  );
-};
-
-const platformLabel: Record<string, string> = {
-  twitter: 'Twitter', x: 'Twitter', youtube: 'YouTube',
-  rss: 'RSS', blog: 'Blog', wechat: '微信', website: 'Web', podcast: 'Podcast',
-};
 
 // content_type → 徽章样式
 const CATEGORY_BADGE: Record<string, { label: string; bg: string; color: string; border: string }> = {
@@ -43,15 +17,6 @@ const CATEGORY_BADGE: Record<string, { label: string; bg: string; color: string;
   technical_insight: { label: '技术洞察', bg: '#F3E5F5', color: '#4A148C', border: '#CE93D8' },
   news:              { label: '快讯',   bg: '#F5F5F5', color: '#616161', border: '#E0E0E0' },
   founder_note:      { label: '创始人',  bg: '#FFF9C4', color: '#F57F17', border: '#FFF176' },
-};
-
-// summary ≤20字全部保留；>20字在15-20字范围内找自然标点断句，找不到则截取20字
-const extractHeadline = (text: string): string => {
-  if (!text) return '';
-  if (text.length <= 20) return text;
-  const match = text.match(/^[\s\S]{15,20}?[，。！？；、]/);
-  if (match) return match[0];
-  return text.slice(0, 20) + '…';
 };
 
 const getArticleHeadline = (article: Article): string => {
@@ -114,7 +79,7 @@ const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {
             background: '#EBF3FF', border: '1px solid #C7DEFF',
             borderRadius: 8, padding: '3px 8px', height: 26, flexShrink: 0,
           }}>
-            <PlatformIcon type={article.sourceType} />
+            <PlatformIcon type={article.sourceType} size={12} color="#1A73E8" />
             <span style={{ fontSize: 12, color: '#1A73E8', fontWeight: 500, lineHeight: 1 }}>{label}</span>
           </div>
 
@@ -167,7 +132,6 @@ const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {
           <span style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>⏱</span>{article.readTime} 分钟阅读
           </span>
-          {/* 质量分（仅高分时显示） */}
           {(article.score ?? 0) >= 75 && (
             <span style={{ fontSize: 11, color: '#888', background: '#F5F5F5', borderRadius: 6, padding: '1px 6px' }}>
               {article.score}分

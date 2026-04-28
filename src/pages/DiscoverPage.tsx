@@ -8,8 +8,75 @@ import PullToRefresh from '@/components/common/PullToRefresh';
 import ChannelDetailModal from '@/components/discover/ChannelDetailModal';
 import { ChannelCardSkeleton } from '@/components/ui/skeleton-card';
 import { mockChannels } from '@/data/mockData';
-import { Channel } from '@/types';
+import { Channel, Source } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+
+const PLATFORM_ICON: Record<string, string> = {
+  twitter: '𝕏', x: '𝕏', youtube: '▶️',
+  website: '📝', blog: '📝', rss: '📰', podcast: '🎙️', wechat: '💬',
+};
+const PLATFORM_CATEGORY: Record<string, string> = {
+  twitter: 'Twitter', x: 'Twitter', youtube: 'YouTube',
+  website: '网站', blog: '博客', rss: 'RSS', podcast: '播客', wechat: '微信',
+};
+
+function apiSourcesToChannels(apiSources: any[], followedIds: Set<string>): Channel[] {
+  const collMap = new Map<string, { col: any; srcs: any[] }>();
+  const standalone: any[] = [];
+
+  apiSources.forEach(s => {
+    if (s.collection_id && s.collections) {
+      if (!collMap.has(s.collection_id)) collMap.set(s.collection_id, { col: s.collections, srcs: [] });
+      collMap.get(s.collection_id)!.srcs.push(s);
+    } else {
+      standalone.push(s);
+    }
+  });
+
+  const toSource = (s: any): Source => ({
+    id: s.id,
+    name: s.name,
+    platform: s.platform,
+    icon: PLATFORM_ICON[s.platform] || '📰',
+    url: s.url || '',
+    description: s.handle ? `@${s.handle}` : '',
+    followerCount: 0,
+    isFollowed: followedIds.has(s.id),
+    lastUpdated: s.created_at || new Date().toISOString(),
+  });
+
+  const channels: Channel[] = [];
+
+  collMap.forEach(({ col, srcs }, collId) => {
+    channels.push({
+      id: collId,
+      name: col.name || '未命名合集',
+      description: '',
+      icon: col.icon || '📰',
+      category: PLATFORM_CATEGORY[srcs[0]?.platform] || 'RSS',
+      sourceCount: srcs.length,
+      subscriberCount: 0,
+      isSubscribed: srcs.some(s => followedIds.has(s.id)),
+      sources: srcs.map(toSource),
+    });
+  });
+
+  standalone.forEach(s => {
+    channels.push({
+      id: s.id,
+      name: s.name,
+      description: s.handle ? `@${s.handle}` : '',
+      icon: PLATFORM_ICON[s.platform] || '📰',
+      category: PLATFORM_CATEGORY[s.platform] || 'RSS',
+      sourceCount: 1,
+      subscriberCount: 0,
+      isSubscribed: followedIds.has(s.id),
+      sources: [toSource(s)],
+    });
+  });
+
+  return channels;
+}
 
 const DiscoverPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -18,7 +85,7 @@ const DiscoverPage = () => {
 
   // 动态计算有内容的分类标签（去重 + 保留顺序），始终把「全部」放第一位
   const categories = ['全部', ...Array.from(new Set(channels.map(ch => ch.category).filter(Boolean)))];
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(true);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const { toast } = useToast();
@@ -30,10 +97,8 @@ const DiscoverPage = () => {
       .filter(s => s.isFollowed)
       .map(s => s.id);
 
-    // 存 localStorage（离线可用）
     localStorage.setItem('followed_source_ids', JSON.stringify(followedIds));
 
-    // 同步到 Supabase
     fetch('/api/sources/follow', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -41,21 +106,40 @@ const DiscoverPage = () => {
     }).catch(() => {});
   }, []);
 
-  // 初始化时从后端加载关注状态（仅当后端有明确记录时才覆盖本地默认值）
+  // 从真实 API 加载信息源，mockChannels 作兜底
   useEffect(() => {
-    fetch('/api/sources/follow')
+    let followedIds = new Set<string>();
+
+    const loadFollowed = fetch('/api/sources/follow')
       .then(r => r.json())
-      .then(({ followedIds }) => {
-        // followedIds 为 null 表示后端未设置过，保留本地默认值
-        if (!Array.isArray(followedIds)) return;
-        const idSet = new Set<string>(followedIds);
-        setChannels(prev => prev.map(ch => ({
-          ...ch,
-          isSubscribed: ch.sources?.some(s => idSet.has(s.id)) ?? false,
-          sources: ch.sources?.map(s => ({ ...s, isFollowed: idSet.has(s.id) })),
-        })));
+      .then(({ followedIds: ids }) => {
+        if (Array.isArray(ids)) followedIds = new Set<string>(ids);
       })
       .catch(() => {});
+
+    const loadSources = fetch('/api/sources')
+      .then(r => r.json())
+      .catch(() => null);
+
+    Promise.all([loadFollowed, loadSources]).then(([, apiData]) => {
+      if (Array.isArray(apiData) && apiData.length > 0) {
+        const realChannels = apiSourcesToChannels(apiData, followedIds);
+        // 用真实数据替换 mock，同时把 followedIds 状态也应用到 mockChannels 中不在真实 API 的频道
+        setChannels(realChannels.length > 0 ? realChannels : mockChannels.map(ch => ({
+          ...ch,
+          isSubscribed: ch.sources?.some(s => followedIds.has(s.id)) ?? false,
+          sources: ch.sources?.map(s => ({ ...s, isFollowed: followedIds.has(s.id) })),
+        })));
+      } else {
+        // API 无数据，用 mock + 关注状态
+        setChannels(mockChannels.map(ch => ({
+          ...ch,
+          isSubscribed: ch.sources?.some(s => followedIds.has(s.id)) ?? false,
+          sources: ch.sources?.map(s => ({ ...s, isFollowed: followedIds.has(s.id) })),
+        })));
+      }
+      setIsLoading(false);
+    });
   }, []);
 
   const handleSubscribe = (channelId: string) => {

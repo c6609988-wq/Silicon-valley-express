@@ -47,7 +47,7 @@ const HomePage = () => {
   const [selectedDate, setSelectedDate]       = useState(getBjTodayKey);
   const { toast }    = useToast();
   const greeting     = getGreeting();
-  const { articles, loading, error } = useLiveTweets(6);
+  const { articles, loading, error, refetch } = useLiveTweets(100);
 
   useEffect(() => {
     const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
@@ -55,8 +55,8 @@ const HomePage = () => {
   }, []);
 
   const handleRefresh = useCallback(async () => {
-    window.location.reload();
-  }, []);
+    await refetch();
+  }, [refetch]);
 
   const handleOnboardingComplete = (selectedChannels: string[]) => {
     localStorage.setItem('hasSeenOnboarding', 'true');
