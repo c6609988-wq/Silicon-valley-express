@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Article } from '@/types';
 import { PlatformIcon } from '@/components/common/PlatformIcon';
-import { extractHeadline } from '@/lib/utils';
+import { extractNewsHeadline } from '@/lib/utils';
 
 interface ArticleCardProps {
   article: Article;
@@ -50,9 +50,9 @@ function getPlatformTheme(type: string) {
 
 const getArticleHeadline = (article: Article): string => {
   if (article.title) return article.title;
-  if (article.aiSummary) return extractHeadline(article.aiSummary);
-  if (article.summary) return extractHeadline(article.summary);
-  return article.title;
+  if (article.aiSummary) return extractNewsHeadline(article.aiSummary);
+  if (article.summary) return extractNewsHeadline(article.summary);
+  return article.sourceName || '';
 };
 
 const ArticleCard = ({ article, index = 0 }: ArticleCardProps) => {

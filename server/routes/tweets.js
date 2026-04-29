@@ -15,7 +15,7 @@ router.get('/latest', async (req, res) => {
 
   // 有缓存直接返回（TTL 30 分钟）
   const cached = getCachedArticles();
-  if (cached) {
+  if (cached && cached.length > 0) {
     console.log('[Tweets] 命中缓存，直接返回');
     return res.json({ tweets: cached.slice(0, count) });
   }
@@ -52,7 +52,9 @@ router.get('/latest', async (req, res) => {
         let parsedTitle = '';
 
         if (row.ai_analysis) {
-          const parsed = row.content_type === 'long'
+          // 生产格式（核心要点\n...）优先用 parseShortAnalysis，忽略 content_type
+          const isNewFormat = /核心要点\s*\n/.test(row.ai_analysis);
+          const parsed = (!isNewFormat && row.content_type === 'long')
             ? parseLongAnalysis(row.ai_analysis, sourceObj)
             : parseShortAnalysis(row.ai_analysis, sourceObj);
           displayContent = parsed.chineseContent;
@@ -77,10 +79,11 @@ router.get('/latest', async (req, res) => {
           .trim()
           .slice(0, 120);
 
-        // 标题优先级：AI 解析真实标题 > 数据库已有中文标题 > 英文首句
+        // 标题优先级：AI 主干子句 > 数据库中文标题 > 英文首句
+        const dbTitleIsChinese = rawTitle && /[一-鿿]/.test(rawTitle);
         const resolvedTitle = !isParsedPlaceholder
           ? parsedTitle
-          : (!isDbPlaceholder ? rawTitle : (firstLine || rawTitle));
+          : (dbTitleIsChinese ? rawTitle : (firstLine || rawTitle));
 
         // 判断 aiSummary 是否为英文（需要翻译）
         const summaryIsEnglish = !aiSummary || !/[一-鿿]/.test(aiSummary);
@@ -343,13 +346,21 @@ function isImageOnly(tweet) {
   );
 }
 
-// 解析短信息 AI 输出（V4 推文聚合格式，含「一、摘要」首节）
+// 解析短信息 AI 输出（兼容生产格式和旧格式）
 function parseShortAnalysis(aiText, source) {
-  // ── 提取「一、摘要」（一句话中文概括）────────────────────────
+  // ── 生产格式（无序号）: 核心要点 / 深度解读 / 原文翻译 ──────
+  const prodKeypointsMatch  = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n\n?深度解读|\n\n?原文翻译|$)/);
+  const prodCommentMatch    = aiText.match(/深度解读\s*\n([\s\S]*?)(?=\n\n?原文翻译|$)/);
+  const prodTranslationMatch = aiText.match(/原文翻译\s*\n([\s\S]*?)$/);
+
+  // ── 旧格式（带序号）: 一、摘要 / 二、核心要点 / 三、划重点 ──
   const onelinerMatch = aiText.match(/一[、.]\s*摘要\s*\n([\s\S]*?)(?=###\s*二|二[、.])/);
   const rawOneliner = onelinerMatch ? onelinerMatch[1].trim().split('\n')[0].replace(/^\[|\]$/g, '').trim() : '';
-  // 过滤掉英文残留（防止模型未遵守指令）
-  const aiOneliner = rawOneliner && /[一-鿿]/.test(rawOneliner) ? rawOneliner : '';
+
+  // 生产格式优先：核心要点第一行即为 aiOneliner
+  const prodOneliner = prodKeypointsMatch ? prodKeypointsMatch[1].trim().split('\n')[0].trim() : '';
+  const aiOneliner = (/[一-鿿]/.test(prodOneliner) ? prodOneliner : '')
+    || (rawOneliner && /[一-鿿]/.test(rawOneliner) ? rawOneliner : '');
 
   // ── 提取「二、今日核心要点」────────────────────────────────
   const keypointsMatch = aiText.match(/二[、.]\s*今日核心要点[\s\S]*?\n([\s\S]*?)(?=###\s*三|三[、.])/);
@@ -382,24 +393,25 @@ function parseShortAnalysis(aiText, source) {
   const commentMatch = aiText.match(/三[、.]\s*划重点[\s\S]*?\n([\s\S]*?)(?=###\s*四|四[、.]|$)/);
   // 兼容旧格式「二、划重点」
   const commentMatchLegacy = aiText.match(/二[、.]\s*划重点[\s\S]*?\n([\s\S]*?)(?=###\s*三|三[、.]|$)/);
-  const aiComment = (commentMatch || commentMatchLegacy)
-    ? (commentMatch || commentMatchLegacy)[1].trim()
-    : '';
+  const aiComment = (prodCommentMatch?.[1]?.trim())
+    || (commentMatch || commentMatchLegacy
+      ? (commentMatch || commentMatchLegacy)[1].trim()
+      : '');
 
-  // ── 提取「四、原文翻译」作为中文内容区 ──────────────────────
+  // ── 中文内容区：生产格式原文翻译 > 旧格式原文翻译 > 全文 ────
   const translationMatch = aiText.match(/四[、.]\s*原文翻译[\s\S]*?\n([\s\S]*?)$/)
     || aiText.match(/三[、.]\s*原文翻译[\s\S]*?\n([\s\S]*?)$/);
-  const chineseContent = translationMatch ? translationMatch[1].trim() : aiText;
+  const chineseContent = (prodTranslationMatch?.[1]?.trim())
+    || (translationMatch ? translationMatch[1].trim() : aiText);
 
-  // ── 生成卡片标题 ─────────────────────────────────────────
-  // 优先用「一、摘要」内容；其次取第一个要点去标签后的内容
-  const firstPoint = keyPoints[0] || '';
-  const titleFromPoint = firstPoint.replace(/\[.*?\][：:]\s*/, '').replace(/（.*?）$/, '').trim().slice(0, 40);
-  const titleFromOneliner = aiOneliner.slice(0, 40);
-  const titleContent = titleFromOneliner || titleFromPoint;
-  const title = titleContent
-    ? `${source.name}：${titleContent}`
-    : `${source.name} 今日动态`;
+  // ── 生成卡片标题（主体+事件+结果，截到第一个括号/逗号前）─────
+  const headlineClause = aiOneliner
+    ? aiOneliner.replace(/[（(，,。！？；].*/s, '').trim().slice(0, 35)
+    : '';
+  const firstPointClean = (keyPoints[0] || '').replace(/\[.*?\][：:]\s*/, '').replace(/[（(，,。].*/s, '').trim().slice(0, 35);
+  const title = (headlineClause && headlineClause.length >= 6)
+    ? headlineClause
+    : (firstPointClean || `${source.name} 今日动态`);
 
   // 摘要：优先用一句话摘要；其次用划重点前两句
   const summaryFromComment = aiComment.split(/(?<=[。！？])\s*/).slice(0, 2).join('').trim();

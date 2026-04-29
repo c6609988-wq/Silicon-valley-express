@@ -90,10 +90,16 @@ function dbRowToArticle(item) {
     ? parseShortAnalysis(analysisText, { name: item.author_name, handle: item.author_handle })
     : null;
 
-  // 标题：优先用 AI 解析出的标题（非"今日动态"占位），其次 DB 里的 title
-  const title = (parsed?.title && !parsed.title.endsWith('今日动态'))
-    ? parsed.title
-    : (item.title || item.author_name || '');
+  // 从 aiOneliner 提取主干子句（主体+事件+结果）
+  const aiHeadline = (aiOneliner && /[一-鿿]/.test(aiOneliner))
+    ? aiOneliner.replace(/[（(，,。！？；].*/s, '').trim().slice(0, 35)
+    : '';
+  // DB title：中文直接用；英文（无汉字）则被 AI 主干覆盖
+  const dbTitle = item.title || '';
+  const dbTitleIsChinese = /[一-鿿]/.test(dbTitle);
+  const title = (aiHeadline && aiHeadline.length >= 6)
+    ? aiHeadline
+    : (dbTitleIsChinese ? dbTitle : (dbTitle || item.author_name || ''));
 
   // 中文内容：若 translated_content 已经是 DeepSeek AI 输出（不是纯翻译），则取 parsed.chineseContent
   const hasRealTranslation = translatedRaw && translatedRaw !== originalContent
@@ -253,10 +259,14 @@ function parseShortAnalysis(aiText, source) {
     .map(l => l.replace(/^\d+[.)、]\s*/, '').replace(/\[.*?\][：:]\s*/, '').trim())
     .filter(Boolean);
 
-  // 标题
-  const titleBase = (hasChineseOneliner ? aiOneliner.slice(0, 30) : '')
-    || (keyPoints[0]?.replace(/\[.*?\][：:]\s*/, '').slice(0, 30) || '');
-  const title = titleBase ? `${source.name}：${titleBase}` : `${source.name} 今日动态`;
+  // 标题：从 aiOneliner 提取主干子句（主体+事件+结果），截到第一个括号/逗号前
+  const headlineClause = hasChineseOneliner
+    ? aiOneliner.replace(/[（(，,。！？；].*/s, '').trim().slice(0, 35)
+    : '';
+  const firstPointClean = (keyPoints[0] || '').replace(/\[.*?\][：:]\s*/, '').replace(/[（(，,。].*/s, '').trim().slice(0, 35);
+  const title = (headlineClause && headlineClause.length >= 6)
+    ? headlineClause
+    : (firstPointClean || `${source.name} 今日动态`);
 
   // 卡片摘要：优先显示 aiOneliner（核心要点一句话），其次 aiComment 前两句
   const summary = (hasChineseOneliner ? aiOneliner : '')
