@@ -25,7 +25,6 @@ router.get('/latest', async (req, res) => {
     const { data: dbRows, error: dbErr } = await supabase
       .from('articles')
       .select('*')
-      .or('is_visible.is.null,is_visible.eq.true')
       .order('published_at', { ascending: false })
       .limit(count * 8);
 

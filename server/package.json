@@ -4,8 +4,8 @@
   "description": "AI 信息采集 + 分析流水线后端服务",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node --dns-result-order=ipv4first index.js",
+    "dev": "nodemon --dns-result-order=ipv4first index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
