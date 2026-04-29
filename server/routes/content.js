@@ -203,7 +203,6 @@ router.get('/', async (req, res) => {
   let query = supabase
     .from('articles')
     .select('*', { count: 'exact' })
-    .or('is_visible.is.null,is_visible.eq.true')
     .order('published_at', { ascending: false })
     .range(offset, offset + limitNum - 1);
 
