@@ -2,49 +2,65 @@ import { useRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface Props {
-  selectedDate: string;          // YYYY-MM-DD（北京时间）
+  selectedDate: string;
   onSelect: (date: string) => void;
-  availableDates?: Set<string>;  // 有内容的日期，无则全部可点
+  availableDates?: Set<string>;
 }
 
-/** 生成北京时间日期字符串，offsetDays=0 是今天 */
 function getBjDateKey(offsetDays = 0): string {
   const ms = Date.now() + 8 * 3600 * 1000 - offsetDays * 86400000;
   return new Date(ms).toISOString().split('T')[0];
 }
 
-function getDayLabel(dateKey: string, index: number): string {
-  if (index === 0) return '今天';
-  if (index === 1) return '昨天';
-  const [y, m, d] = dateKey.split('-').map(Number);
-  const dow = new Date(y, m - 1, d).getDay();
+function getDayLabel(dateKey: string): string {
+  const today = getBjDateKey(0);
+  const yesterday = getBjDateKey(1);
+  if (dateKey === today) return '今天';
+  if (dateKey === yesterday) return '昨天';
+
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const dow = new Date(year, month - 1, day).getDay();
   return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dow];
+}
+
+function buildDates(availableDates?: Set<string>) {
+  const recentDates = Array.from({ length: 7 }, (_, i) => getBjDateKey(i));
+  const merged = new Set<string>(recentDates);
+
+  availableDates?.forEach(date => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) merged.add(date);
+  });
+
+  return Array.from(merged)
+    .sort((a, b) => b.localeCompare(a))
+    .map(key => ({
+      key,
+      day: parseInt(key.split('-')[2], 10),
+      label: getDayLabel(key),
+    }));
 }
 
 const DateSelector = ({ selectedDate, onSelect, availableDates }: Props) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const dates = Array.from({ length: 7 }, (_, i) => {
-    const key = getBjDateKey(i);
-    const day = parseInt(key.split('-')[2], 10);
-    const label = getDayLabel(key, i);
-    const hasData = !availableDates || availableDates.has(key);
-    return { key, day, label, hasData };
-  });
+  const dates = buildDates(availableDates);
 
   return (
     <div
       ref={scrollRef}
       style={{
-        display: 'flex',
-        gap: 8,
+        display: 'grid',
+        gridAutoFlow: 'column',
+        gridAutoColumns: 'calc((100% - 30px) / 7)',
+        gap: 5,
+        width: '100%',
         overflowX: 'auto',
+        overflowY: 'hidden',
         padding: '4px 0 4px',
         scrollbarWidth: 'none',
         WebkitOverflowScrolling: 'touch',
       }}
     >
-      {dates.map(({ key, day, label, hasData }) => {
+      {dates.map(({ key, day, label }) => {
         const active = key === selectedDate;
         return (
           <motion.button
@@ -52,49 +68,42 @@ const DateSelector = ({ selectedDate, onSelect, availableDates }: Props) => {
             whileTap={{ scale: 0.92 }}
             onClick={() => onSelect(key)}
             style={{
-              flexShrink: 0,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 52,
-              height: 58,
+              width: '100%',
+              minWidth: 0,
+              height: 48,
               borderRadius: 16,
               border: 'none',
               cursor: 'pointer',
               background: active ? '#1A73E8' : '#F0F2F5',
               transition: 'background 0.18s',
-              position: 'relative',
             }}
           >
-            <span style={{
-              fontSize: 11,
-              fontWeight: 500,
-              color: active ? 'rgba(255,255,255,0.82)' : '#999',
-              marginBottom: 3,
-              lineHeight: 1,
-            }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 400,
+                color: active ? 'rgba(255,255,255,0.84)' : '#8E96A3',
+                marginBottom: 4,
+                lineHeight: 1,
+              }}
+            >
               {label}
             </span>
-            <span style={{
-              fontSize: 19,
-              fontWeight: 700,
-              color: active ? '#fff' : '#222',
-              lineHeight: 1,
-            }}>
+            <span
+              style={{
+                fontSize: 18,
+                fontWeight: 600,
+                color: active ? '#fff' : '#343A43',
+                lineHeight: 1,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
               {day}
             </span>
-            {/* 有内容小圆点 */}
-            {hasData && !active && (
-              <span style={{
-                position: 'absolute',
-                bottom: 6,
-                width: 4,
-                height: 4,
-                borderRadius: '50%',
-                background: '#1A73E8',
-              }} />
-            )}
           </motion.button>
         );
       })}

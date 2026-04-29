@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Article } from '@/types';
+import { getSeedArticles } from '@/data/seedArticles';
 
 const CACHE_KEY = 'home_articles_cache';
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 interface CacheEntry {
   articles: Article[];
@@ -16,11 +17,18 @@ function saveCache(articles: Article[]) {
   } catch {}
 }
 
+function parseCache(raw: string | null): CacheEntry | null {
+  if (!raw) return null;
+  const parsed = JSON.parse(raw);
+  if (Array.isArray(parsed)) return { articles: parsed, timestamp: 0 };
+  if (Array.isArray(parsed?.articles)) return parsed;
+  return null;
+}
+
 function loadCache(): Article[] {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return [];
-    const entry: CacheEntry = JSON.parse(raw);
+    const entry = parseCache(localStorage.getItem(CACHE_KEY));
+    if (!entry) return [];
     if (Date.now() - entry.timestamp > CACHE_TTL_MS) return [];
     return entry.articles;
   } catch {
@@ -30,28 +38,67 @@ function loadCache(): Article[] {
 
 function loadCacheStale(): Article[] {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return [];
-    const entry: CacheEntry = JSON.parse(raw);
-    return entry.articles;
+    const entry = parseCache(localStorage.getItem(CACHE_KEY));
+    return entry?.articles ?? [];
   } catch {
     return [];
   }
 }
 
-async function fetchArticles(count: number): Promise<Article[]> {
-  const url = import.meta.env.DEV
-    ? `http://localhost:3001/api/tweets/latest?count=${count}`
-    : `/api/content?format=articles&limit=${count}`;
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  return data.articles || data.tweets || [];
+function articleKey(article: Article) {
+  return article.id || article.url || `${article.title}-${article.sourceHandle || article.sourceName}`;
 }
 
-export function useLiveTweets(count = 6) {
-  const [articles, setArticles] = useState<Article[]>(() => loadCacheStale());
+function mergeSeedArticles(articles: Article[]): Article[] {
+  if (!import.meta.env.DEV) return articles;
+
+  const merged = new Map<string, Article>();
+
+  getSeedArticles().forEach(article => {
+    merged.set(articleKey(article), article);
+  });
+
+  articles.forEach(article => {
+    const key = articleKey(article);
+    if (!merged.has(key)) merged.set(key, article);
+  });
+
+  return Array.from(merged.values()).sort((a, b) =>
+    ((b.priorityWeight ?? 1) - (a.priorityWeight ?? 1)) ||
+    ((b.score ?? 0) - (a.score ?? 0)) ||
+    (new Date(b.publishTime).getTime() - new Date(a.publishTime).getTime())
+  );
+}
+
+async function fetchArticles(count: number): Promise<Article[]> {
+  const limit = Math.max(count, 100);
+  const urls = import.meta.env.DEV
+    ? [
+        `http://localhost:3001/api/content?format=articles&limit=${limit}`,
+        `http://localhost:3001/api/tweets/latest?count=${limit}`,
+      ]
+    : [`/api/content?format=articles&limit=${limit}`];
+
+  let lastError: Error | null = null;
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const articles = data.articles || data.tweets || [];
+      if (articles.length > 0) return articles;
+    } catch (error: any) {
+      lastError = error;
+    }
+  }
+
+  if (lastError) throw lastError;
+  return [];
+}
+
+export function useLiveTweets(count = 100) {
+  const [articles, setArticles] = useState<Article[]>(() => mergeSeedArticles(loadCacheStale()));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,26 +108,23 @@ export function useLiveTweets(count = 6) {
     try {
       const items = await fetchArticles(count);
       if (items.length > 0) {
-        saveCache(items);
-        setArticles(items);
+        const merged = mergeSeedArticles(items);
+        saveCache(merged);
+        setArticles(merged);
       } else {
-        const cached = loadCacheStale();
-        setArticles(cached);
+        setArticles(mergeSeedArticles(loadCacheStale()));
       }
     } catch (e: any) {
-      const cached = loadCacheStale();
+      const cached = mergeSeedArticles(loadCacheStale());
       setArticles(cached);
-      if (cached.length === 0) {
-        setError(e.message);
-      }
+      if (cached.length === 0) setError(e.message);
     } finally {
       setLoading(false);
     }
   }, [count]);
 
   useEffect(() => {
-    // 缓存未过期时直接用缓存，跳过网络请求
-    const fresh = loadCache();
+    const fresh = mergeSeedArticles(loadCache());
     if (fresh.length > 0) {
       setArticles(fresh);
       setLoading(false);

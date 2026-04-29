@@ -19,7 +19,9 @@ if (isConfigured) {
       delete: () => chain,
       eq: () => chain,
       in: () => chain,
+      or: () => chain,
       order: () => chain,
+      range: () => Promise.resolve({ data: [], count: 0, error: null }),
       limit: () => Promise.resolve({ data: [], error: null }),
       then: (resolve) => resolve({ data: [], error: null }),
     };

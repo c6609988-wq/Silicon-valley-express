@@ -1,211 +1,215 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Moon, Sun, Monitor, ChevronDown, ChevronUp, Save } from 'lucide-react';
+import { ArrowLeft, Check, Clock3, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MobileLayout from '@/components/layout/MobileLayout';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
-import { API_BASE } from '@/lib/apiBase';
+type PushChannel = 'email' | 'feishu';
 
-const pushTimes = ['07:00', '08:00', '09:00', '10:00', '12:00', '18:00', '20:00', '21:00'];
-const themeOptions = [
-  { value: 'light', label: '浅色', icon: Sun },
-  { value: 'dark', label: '深色', icon: Moon },
-  { value: 'system', label: '跟随系统', icon: Monitor },
-];
+const hours = ['06', '07', '08', '09', '10'];
+const minutes = ['00', '01', '02'];
 
-const getInitialTheme = () => {
-  return localStorage.getItem('theme') || 'system';
-};
-
-const applyTheme = (theme: string) => {
-  const root = document.documentElement;
-  if (theme === 'dark') {
-    root.classList.add('dark');
-  } else if (theme === 'light') {
-    root.classList.remove('dark');
-  } else {
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-  }
-};
+const isValidEmail = (value: string) => /.+@.+\..+/.test(value.trim());
+const isValidWebhook = (value: string) => value.trim().startsWith('https://open.feishu.cn/');
 
 const SettingsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [selectedTime, setSelectedTime] = useState('08:00');
-  const [selectedTheme, setSelectedTheme] = useState(getInitialTheme);
-  const [showPrompts, setShowPrompts] = useState(false);
-  const [shortPrompt, setShortPrompt] = useState('');
-  const [longPrompt, setLongPrompt] = useState('');
-  const [threshold, setThreshold] = useState('1000');
-  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [channel, setChannel] = useState<PushChannel>('email');
+  const [email, setEmail] = useState('');
+  const [webhook, setWebhook] = useState('');
+  const [hour, setHour] = useState('08');
+  const [minute, setMinute] = useState('00');
 
-  useEffect(() => {
-    applyTheme(selectedTheme);
-    localStorage.setItem('theme', selectedTheme);
-  }, [selectedTheme]);
+  const selectedTarget = channel === 'email' ? email : webhook;
+  const isTargetValid = useMemo(() => (
+    channel === 'email' ? isValidEmail(email) : isValidWebhook(webhook)
+  ), [channel, email, webhook]);
 
-  useEffect(() => {
-    if (selectedTheme !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => applyTheme('system');
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [selectedTheme]);
+  const validationText = channel === 'email'
+    ? '请输入有效的邮箱地址'
+    : '请输入有效的飞书 Webhook 地址';
 
-  useEffect(() => {
-    if (!showPrompts) return;
-    fetch(`${API_BASE}/api/settings/prompts`)
-      .then(r => r.json())
-      .then(data => {
-        setShortPrompt(data.SHORT_CONTENT_PROMPT || '');
-        setLongPrompt(data.LONG_CONTENT_PROMPT || '');
-        setThreshold(String(data.CONTENT_LENGTH_THRESHOLD || 1000));
-      })
-      .catch(() => {/* 后端未启动时静默失败 */});
-  }, [showPrompts]);
+  const handleSave = () => {
+    if (!isTargetValid) return;
 
-  const savePrompt = async (key: string, value: string) => {
-    setSavingPrompt(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/settings/prompts/${key}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value }),
-      });
-      if (!res.ok) throw new Error('保存失败');
-      toast({ title: '保存成功', description: '提示词已更新' });
-    } catch {
-      toast({ title: '保存失败', description: '请确认后端服务已启动', variant: 'destructive' });
-    } finally {
-      setSavingPrompt(false);
-    }
+    localStorage.setItem('push_settings', JSON.stringify({
+      channel,
+      target: selectedTarget.trim(),
+      time: `${hour}:${minute}`,
+    }));
+
+    toast({
+      title: '保存成功',
+      description: `每天 ${hour}:${minute} 将通过${channel === 'email' ? '邮件' : '飞书'}发送日报`,
+    });
   };
 
   return (
     <MobileLayout showNav={false}>
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border">
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-4 px-4 py-3">
           <motion.button
-            onClick={() => navigate('/profile')}
-            className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center"
+            type="button"
+            onClick={() => navigate(-1)}
+            className="w-10 h-10 rounded-full bg-secondary/60 flex items-center justify-center"
             whileTap={{ scale: 0.95 }}
           >
             <ArrowLeft className="w-5 h-5 text-foreground" />
           </motion.button>
-          <h1 className="text-lg font-bold text-foreground">设置</h1>
+          <h1 className="text-xl font-bold text-foreground">推送设置</h1>
         </div>
       </div>
 
-      <div className="px-4 py-6 space-y-8">
-        {/* 推送时间 */}
-        <div>
-          <h3 className="text-sm font-semibold text-foreground mb-3">推送时间</h3>
-          <div className="grid grid-cols-4 gap-2">
-            {pushTimes.map((time) => (
-              <button
-                key={time}
-                onClick={() => setSelectedTime(time)}
-                className={`py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  selectedTime === time
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-foreground'
-                }`}
-              >
-                {time}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground text-center mt-3">
-            每日将在 {selectedTime} 推送内容摘要
-          </p>
-        </div>
-
-        {/* 外观模式 */}
-        <div>
-          <h3 className="text-sm font-semibold text-foreground mb-3">外观模式</h3>
-          <div className="flex gap-2">
-            {themeOptions.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setSelectedTheme(value)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-xs font-medium transition-colors ${
-                  selectedTheme === value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-foreground'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* AI 提示词设置 */}
-        <div>
-          <button
-            onClick={() => setShowPrompts(!showPrompts)}
-            className="w-full flex items-center justify-between py-2"
-          >
-            <h3 className="text-sm font-semibold text-foreground">AI 提示词设置</h3>
-            {showPrompts ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-          </button>
-
-          {showPrompts && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="space-y-5 mt-3"
+      <div className="px-4 py-7 pb-8 space-y-8">
+        <section>
+          <h2 className="text-base font-medium text-foreground mb-4">推送渠道</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setChannel('email')}
+              className={`relative h-[112px] rounded-3xl border-2 transition-colors ${
+                channel === 'email'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border bg-card'
+              }`}
             >
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">短内容提示词（推文/短文）</label>
-                <Textarea
-                  value={shortPrompt}
-                  onChange={e => setShortPrompt(e.target.value)}
-                  rows={6}
-                  className="text-xs font-mono resize-none"
-                />
-                <Button size="sm" disabled={savingPrompt} onClick={() => savePrompt('SHORT_CONTENT_PROMPT', shortPrompt)} className="w-full gap-2">
-                  <Save className="w-3.5 h-3.5" />保存短内容提示词
-                </Button>
+              {channel === 'email' && (
+                <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="h-4 w-4" />
+                </span>
+              )}
+              <div className="flex h-full flex-col items-center justify-center gap-3">
+                <span className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                  channel === 'email' ? 'bg-primary/12' : 'bg-muted'
+                }`}>
+                  <Mail className={`h-6 w-6 ${channel === 'email' ? 'text-primary' : 'text-muted-foreground'}`} />
+                </span>
+                <span className={`text-base ${channel === 'email' ? 'text-primary' : 'text-foreground'}`}>邮件</span>
               </div>
+            </button>
 
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">长内容提示词（视频/长文）</label>
-                <Textarea
-                  value={longPrompt}
-                  onChange={e => setLongPrompt(e.target.value)}
-                  rows={6}
-                  className="text-xs font-mono resize-none"
-                />
-                <Button size="sm" disabled={savingPrompt} onClick={() => savePrompt('LONG_CONTENT_PROMPT', longPrompt)} className="w-full gap-2">
-                  <Save className="w-3.5 h-3.5" />保存长内容提示词
-                </Button>
+            <button
+              type="button"
+              onClick={() => setChannel('feishu')}
+              className={`relative h-[112px] rounded-3xl border-2 transition-colors ${
+                channel === 'feishu'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border bg-card'
+              }`}
+            >
+              {channel === 'feishu' && (
+                <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="h-4 w-4" />
+                </span>
+              )}
+              <div className="flex h-full flex-col items-center justify-center gap-3">
+                <span className={`flex h-12 w-12 items-center justify-center rounded-full text-2xl ${
+                  channel === 'feishu' ? 'bg-primary/12' : 'bg-muted'
+                }`}>
+                  🪐
+                </span>
+                <span className={`text-base ${channel === 'feishu' ? 'text-primary' : 'text-foreground'}`}>飞书</span>
               </div>
+            </button>
+          </div>
+        </section>
 
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">长/短内容字数阈值</label>
-                <Input
-                  type="number"
-                  value={threshold}
-                  onChange={e => setThreshold(e.target.value)}
-                  className="h-9"
-                />
-                <Button size="sm" disabled={savingPrompt} onClick={() => savePrompt('CONTENT_LENGTH_THRESHOLD', threshold)} className="w-full gap-2">
-                  <Save className="w-3.5 h-3.5" />保存阈值
-                </Button>
+        <section className="space-y-3">
+          {channel === 'email' ? (
+            <>
+              <h2 className="text-base font-medium text-foreground">接收邮箱</h2>
+              <Input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="your@email.com"
+                className="h-14 rounded-2xl bg-card text-base"
+              />
+              <p className="text-sm leading-6 text-muted-foreground">
+                日报将发送至该邮箱，支持 QQ 邮箱、163、企业邮箱等
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-base font-medium text-foreground">飞书机器人 Webhook</h2>
+              <Input
+                value={webhook}
+                onChange={(event) => setWebhook(event.target.value)}
+                placeholder="https://open.feishu.cn/open-apis/bot/..."
+                className="h-14 rounded-2xl bg-card text-base"
+              />
+              <div className="rounded-2xl bg-muted/50 p-4 text-sm leading-6 text-muted-foreground">
+                <p className="font-semibold text-foreground">如何获取 Webhook?</p>
+                <p>1. 在飞书群中添加「自定义机器人」</p>
+                <p>2. 复制生成的 Webhook 地址粘贴到此处</p>
+                <p>3. 日报将以卡片消息形式发到群里</p>
               </div>
-            </motion.div>
+            </>
           )}
-        </div>
+        </section>
+
+        <section>
+          <div className="mb-5 flex items-center gap-2">
+            <Clock3 className="h-4.5 w-4.5 text-primary" style={{ width: 18, height: 18 }} />
+            <h2 className="text-base font-medium text-foreground">推送时间</h2>
+          </div>
+
+          <div className="mx-auto grid max-w-[260px] grid-cols-[1fr_auto_1fr] items-center gap-4">
+            <div className="space-y-4 text-center">
+              {hours.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setHour(item)}
+                  className={`h-12 w-full rounded-2xl text-2xl font-semibold transition-colors ${
+                    hour === item
+                      ? 'border border-primary/20 bg-primary/5 text-foreground'
+                      : 'text-muted-foreground/45'
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+            <span className="pb-1 text-3xl font-bold text-foreground">:</span>
+            <div className="space-y-4 text-center">
+              {minutes.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setMinute(item)}
+                  className={`h-12 w-full rounded-2xl text-2xl font-semibold transition-colors ${
+                    minute === item
+                      ? 'border border-primary/20 bg-primary/5 text-foreground'
+                      : 'text-muted-foreground/45'
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            上下滑动选择时间，每天 <span className="font-semibold text-foreground">{hour}:{minute}</span> 发送日报
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!isTargetValid}
+            className="h-14 w-full rounded-2xl bg-primary text-lg font-semibold text-primary-foreground transition-opacity disabled:opacity-45"
+          >
+            保存设置
+          </button>
+          {!isTargetValid && (
+            <p className="text-center text-sm text-muted-foreground">{validationText}</p>
+          )}
+        </section>
       </div>
     </MobileLayout>
   );

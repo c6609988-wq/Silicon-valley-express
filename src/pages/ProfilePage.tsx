@@ -78,8 +78,8 @@ const ProfilePage = () => {
                 onClick={() => navigate('/settings')}
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-sm">
-                    <span className="text-2xl font-bold text-primary-foreground">
+                  <div className="w-14 h-14 rounded-full bg-white border-2 border-primary flex items-center justify-center shadow-sm">
+                    <span className="text-2xl font-bold text-primary">
                       {mockUser.nickname.charAt(0)}
                     </span>
                   </div>
@@ -187,8 +187,8 @@ const ProfilePage = () => {
               >
                 <div className="flex flex-col items-center text-center gap-3">
                   {/* 默认头像 */}
-                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                    <UserCircle2 className="w-10 h-10 text-muted-foreground/50" />
+                  <div className="w-16 h-16 rounded-full bg-white border-2 border-primary flex items-center justify-center">
+                    <UserCircle2 className="w-10 h-10 text-primary" />
                   </div>
                   <div>
                     <h2 className="text-base font-bold text-foreground">未登录</h2>

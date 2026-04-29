@@ -54,15 +54,15 @@ export const formatPublishTime = (timeStr: string): string => {
 };
 
 // 获取问候语
-export const getGreeting = (): string => {
+export const getGreetingMeta = (): { text: string; icon: 'sun' | 'moon' } => {
   const hour = new Date().getHours();
-  if (hour < 6) return '夜深了';
-  if (hour < 9) return '早上好';
-  if (hour < 12) return '上午好';
-  if (hour < 14) return '中午好';
-  if (hour < 18) return '下午好';
-  if (hour < 22) return '晚上好';
-  return '夜深了';
+  if (hour >= 6 && hour < 12) return { text: '早上好', icon: 'sun' };
+  if (hour >= 12 && hour < 18) return { text: '下午好', icon: 'sun' };
+  return { text: '夜深了', icon: 'moon' };
+};
+
+export const getGreeting = (): string => {
+  return getGreetingMeta().text;
 };
 
 // Mock 文章数据

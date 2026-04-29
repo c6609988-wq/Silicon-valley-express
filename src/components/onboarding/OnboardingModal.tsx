@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChevronRight, Zap, Sparkles, Bell } from 'lucide-react';
+import { Check, ChevronRight, Zap, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mockChannels } from '@/data/mockData';
 
@@ -26,14 +26,14 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-[100] bg-background flex flex-col"
+        className="fixed inset-0 z-[100] h-[100dvh] max-h-[100dvh] overflow-hidden bg-background flex flex-col"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
       >
-        <div className="flex-1 flex flex-col max-w-[430px] mx-auto w-full">
+        <div className="flex-1 min-h-0 flex flex-col max-w-[430px] mx-auto w-full">
           {/* Progress bar */}
-          <div className="flex gap-1 px-4 pt-6">
+          <div className="shrink-0 flex gap-1 px-4 pt-6">
             {Array.from({ length: totalSteps }).map((_, i) => (
               <div
                 key={i}
@@ -82,13 +82,14 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
           {/* ── Step 1：选择频道 ── */}
           {step === 1 && (
             <motion.div
-              className="flex-1 flex flex-col p-6"
+              className="flex-1 min-h-0 overflow-hidden flex flex-col p-6"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
             >
-              <div className="flex items-center justify-between mb-6">
+              <div className="shrink-0 flex items-center justify-between mb-6">
                 <h2 className="text-lg font-bold text-foreground">选择感兴趣的频道</h2>
                 <button
+                  type="button"
                   onClick={() => onComplete([])}
                   className="text-sm text-muted-foreground"
                 >
@@ -96,9 +97,10 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
                 </button>
               </div>
 
-              <div className="flex-1 space-y-3 overflow-y-auto pb-2" style={{ minHeight: 0 }}>
+              <div className="flex-1 min-h-0 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-4">
                 {mockChannels.map((channel) => (
                   <motion.button
+                    type="button"
                     key={channel.id}
                     onClick={() => toggleChannel(channel.id)}
                     className={`w-full flex items-center gap-3 p-4 rounded-xl border transition-colors ${
@@ -122,7 +124,7 @@ const OnboardingModal = ({ isOpen, onComplete }: OnboardingModalProps) => {
                 ))}
               </div>
 
-              <div className="pt-4 pb-2 bg-background">
+              <div className="shrink-0 -mx-6 px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] border-t border-border/60 bg-background/95">
                 <Button
                   onClick={() => setStep(2)}
                   className="w-full h-12 rounded-xl text-base"

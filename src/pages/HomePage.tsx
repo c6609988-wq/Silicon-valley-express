@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { Bell, Search, Sun } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import MobileLayout from '@/components/layout/MobileLayout';
 import DateSelector from '@/components/home/DateSelector';
 import ArticleCard from '@/components/home/ArticleCard';
 import OnboardingModal from '@/components/onboarding/OnboardingModal';
 import PullToRefresh from '@/components/common/PullToRefresh';
+import SearchBar from '@/components/common/SearchBar';
 import { ArticleCardSkeleton } from '@/components/ui/skeleton-card';
-import { getGreeting, mockUser } from '@/data/mockData';
+import { getGreetingMeta, mockUser } from '@/data/mockData';
 import { useLiveTweets } from '@/hooks/useLiveTweets';
 import { useToast } from '@/hooks/use-toast';
 import { Article } from '@/types';
@@ -43,10 +46,13 @@ function groupByDate(articles: Article[]): { dateLabel: string; dateKey: string;
 }
 
 const HomePage = () => {
+  const navigate = useNavigate();
   const [showOnboarding, setShowOnboarding]   = useState(false);
   const [selectedDate, setSelectedDate]       = useState(getBjTodayKey);
+  const [showSearch, setShowSearch]           = useState(false);
+  const [searchQuery, setSearchQuery]         = useState('');
   const { toast }    = useToast();
-  const greeting     = getGreeting();
+  const greeting     = getGreetingMeta();
   const { articles, loading, error, refetch } = useLiveTweets(100);
 
   useEffect(() => {
@@ -69,8 +75,27 @@ const HomePage = () => {
   const grouped      = groupByDate(articles);
   const availableDates = new Set(grouped.map(g => g.dateKey));
 
+  useEffect(() => {
+    if (!loading && grouped.length > 0 && !availableDates.has(selectedDate)) {
+      setSelectedDate(grouped[0].dateKey);
+    }
+  }, [loading, grouped, availableDates, selectedDate]);
+
   // 当前选中日期的内容（找不到则 undefined）
   const selectedGroup = grouped.find(g => g.dateKey === selectedDate);
+  const visibleArticles = selectedGroup?.items.filter(article => {
+    const keyword = searchQuery.trim().toLowerCase();
+    if (!keyword) return true;
+
+    return [
+      article.title,
+      article.summary,
+      article.aiSummary,
+      article.sourceName,
+      article.sourceHandle,
+      ...(article.tags ?? []),
+    ].some(value => value?.toLowerCase().includes(keyword));
+  }) ?? [];
 
   // 副标题：选中今天显示"今日资讯"，其他日期显示具体日期
   const subTitle = (() => {
@@ -99,20 +124,65 @@ const HomePage = () => {
             animate={{ opacity: 1, y: 0 }}
           >
             <div className="px-4 pt-4 pb-2">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h1 className="text-xl font-bold" style={{ color: '#111' }}>
-                    {greeting}，{mockUser.nickname} 👋
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 leading-none">
+                    <span className="text-[13px] font-medium" style={{ color: '#6B7280' }}>
+                      {greeting.text}
+                    </span>
+                    <span className="text-[13px] font-medium" style={{ color: '#6B7280' }}>
+                      {mockUser.nickname}
+                    </span>
+                    {greeting.icon === 'sun' ? (
+                      <Sun aria-hidden="true" className="h-3.5 w-3.5 shrink-0" style={{ color: '#F97316' }} />
+                    ) : (
+                      <span aria-hidden="true" className="shrink-0 text-[14px] leading-none">🌙</span>
+                    )}
+                  </div>
+                  <h1 className="mt-1 text-[21px] font-bold leading-none text-foreground" style={{ letterSpacing: 0 }}>
+                    硅谷速递
                   </h1>
-                  <p className="text-sm mt-0.5" style={{ color: '#999' }}>{subTitle}</p>
                 </div>
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{ background: '#1A73E8' }}
-                >
-                  <span className="text-sm font-bold text-white">{mockUser.nickname.charAt(0)}</span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <motion.button
+                    type="button"
+                    aria-label="推送设置"
+                    onClick={() => navigate('/settings')}
+                    className="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-secondary"
+                    whileTap={{ scale: 0.94 }}
+                  >
+                    <Bell style={{ color: '#6B7280', width: 19, height: 19 }} />
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    aria-label="搜索"
+                    onClick={() => setShowSearch(prev => !prev)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-secondary"
+                    whileTap={{ scale: 0.94 }}
+                  >
+                    <Search style={{ color: showSearch ? '#1A73E8' : '#6B7280', width: 20, height: 20 }} />
+                  </motion.button>
                 </div>
               </div>
+
+              {showSearch && (
+                <motion.div
+                  className="mb-3"
+                  initial={{ opacity: 0, height: 0, y: -4 }}
+                  animate={{ opacity: 1, height: 'auto', y: 0 }}
+                  exit={{ opacity: 0, height: 0, y: -4 }}
+                >
+                  <SearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    placeholder="搜索文章、频道、关键词..."
+                  />
+                </motion.div>
+              )}
+
+              {!showSearch && (
+                <p className="text-[13px] leading-5 -mt-1 mb-2" style={{ color: '#9CA3AF' }}>{subTitle}</p>
+              )}
 
               {/* ── 日期选择器 ── */}
               <DateSelector
@@ -133,7 +203,7 @@ const HomePage = () => {
               <p className="text-sm text-muted-foreground text-center py-8">
                 获取推文失败：{error}
               </p>
-            ) : !selectedGroup || selectedGroup.items.length === 0 ? (
+            ) : !selectedGroup || visibleArticles.length === 0 ? (
               <motion.div
                 key={selectedDate}
                 initial={{ opacity: 0, y: 12 }}
@@ -142,19 +212,21 @@ const HomePage = () => {
               >
                 <p className="text-3xl">📭</p>
                 <p className="text-sm text-muted-foreground">
-                  该日期暂无内容
+                  {searchQuery.trim() ? '没有找到相关文章' : '该日期暂无内容'}
                 </p>
-                <p className="text-xs" style={{ color: '#bbb' }}>每天上午 7:00 / 下午 3:00 自动更新</p>
+                <p className="text-xs" style={{ color: '#bbb' }}>
+                  {searchQuery.trim() ? '换个关键词试试看' : '每天上午 7:00 / 下午 3:00 自动更新'}
+                </p>
               </motion.div>
             ) : (
               <motion.div
-                key={selectedDate}
+                key={`${selectedDate}-${searchQuery}`}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2 }}
                 className="space-y-4"
               >
-                {selectedGroup.items.map((article, index) => (
+                {visibleArticles.map((article, index) => (
                   <ArticleCard key={article.id} article={article} index={index} />
                 ))}
               </motion.div>

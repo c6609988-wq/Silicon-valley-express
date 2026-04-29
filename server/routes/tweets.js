@@ -1,9 +1,9 @@
 // server/routes/tweets.js
 const express = require('express');
 const router = express.Router();
-const { getUserTweets } = require('../api/tikhub');
+const { getUserTweets, getYouTubeVideos, getVideoTranscript } = require('../api/tikhub');
 const { analyzeContent, callAI } = require('../api/openrouter');
-const { SHORT_CONTENT_PROMPT } = require('../config/prompts');
+const { SHORT_CONTENT_PROMPT, LONG_CONTENT_PROMPT } = require('../config/prompts');
 const presets = require('../config/presets');
 const { setCachedArticles, getCachedArticles } = require('../services/articleCache');
 const { supabase } = require('../db');
@@ -179,9 +179,10 @@ router.get('/latest', async (req, res) => {
 
   console.log('[Tweets] 开始实时抓取 + AI 分析...');
   const xSources = presets.presets.filter(s => s.platform === 'x' && s.enabled);
+  const youtubeSources = presets.presets.filter(s => s.platform === 'youtube' && s.enabled);
   const today = new Date().toISOString().split('T')[0];
 
-  const results = await Promise.allSettled(
+  const xResults = await Promise.allSettled(
     xSources.map(async (source) => {
       try {
         const username = source.handle.replace('@', '');
@@ -238,7 +239,64 @@ router.get('/latest', async (req, res) => {
     })
   );
 
-  const articles = results
+  const youtubeResults = await Promise.allSettled(
+    youtubeSources.map(async (source) => {
+      try {
+        const videos = await getYouTubeVideos(source.url, 3);
+        const video = videos[0];
+
+        if (!video) {
+          console.log(`[Tweets] ${source.name} 无 YouTube 新视频`);
+          return null;
+        }
+
+        const videoId = video.video_id || video.id;
+        let transcript = videoId ? await getVideoTranscript(videoId, 'en') : '';
+        if (!transcript && videoId) transcript = await getVideoTranscript(videoId, 'auto');
+
+        const originalContent = transcript || video.description || video.title || '';
+        if (!originalContent.trim()) {
+          console.log(`[Tweets] ${source.name} YouTube 视频无有效文本`);
+          return null;
+        }
+
+        const publishedAt = video.published_at || video.publish_time || new Date().toISOString();
+        const analysisInput = `博主名称：${source.name} ${source.handle || ''}\n平台：YouTube\n日期：${new Date(publishedAt).toISOString().split('T')[0]}\n标题：${video.title || ''}\n链接：${video.url || `https://youtube.com/watch?v=${videoId}`}\n\n视频内容/字幕：\n${originalContent}`;
+
+        console.log(`[Tweets] 正在分析 YouTube ${source.name}：${video.title || videoId}`);
+        const aiAnalysis = await analyzeContent(LONG_CONTENT_PROMPT, analysisInput);
+        const parsed = parseLongAnalysis(aiAnalysis, source);
+
+        const article = {
+          id: `${source.id}-${videoId || today}`,
+          title: parsed.title || video.title || `${source.name} YouTube 更新`,
+          summary: parsed.summary || originalContent.slice(0, 120),
+          content: parsed.chineseContent,
+          originalContent,
+          sourceType: 'youtube',
+          sourceName: source.name,
+          sourceHandle: 'YouTube',
+          sourceIcon: '▶️',
+          publishTime: publishedAt,
+          readTime: Math.max(1, Math.ceil(aiAnalysis.length / 400)),
+          isBookmarked: false,
+          url: video.url || `https://youtube.com/watch?v=${videoId}`,
+          score: source.score,
+          aiSummary: parsed.aiSummary,
+          aiComment: parsed.aiComment,
+          chapters: parsed.chapters,
+        };
+
+        console.log(`[Tweets] ✓ YouTube ${source.name} 分析完成：${article.title}`);
+        return article;
+      } catch (err) {
+        console.error(`[Tweets] YouTube ${source.name} 处理失败:`, err.message);
+        return null;
+      }
+    })
+  );
+
+  const articles = [...xResults, ...youtubeResults]
     .filter(r => r.status === 'fulfilled' && r.value)
     .map(r => r.value)
     .sort((a, b) =>

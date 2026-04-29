@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface CategoryTabsProps {
@@ -11,55 +11,52 @@ const CategoryTabs = ({ categories, active, onChange }: CategoryTabsProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const handleClick = (cat: string, index: number) => {
-    onChange(cat);
-
+  const scrollToIndex = useCallback((index: number) => {
     const container = scrollRef.current;
     const btn = buttonRefs.current[index];
     if (!container || !btn) return;
 
-    const containerLeft = container.scrollLeft;
-    const containerRight = containerLeft + container.clientWidth;
-    const btnLeft = btn.offsetLeft;
-    const btnRight = btnLeft + btn.offsetWidth;
-    const padding = 16; // 左右 padding
+    const maxScrollLeft = container.scrollWidth - container.clientWidth;
+    const targetLeft = btn.offsetLeft + btn.offsetWidth / 2 - container.clientWidth / 2;
 
-    // 按钮右侧超出容器可视区 → 向右滚动刚好露出
-    if (btnRight + padding > containerRight) {
-      container.scrollTo({
-        left: btnRight + padding - container.clientWidth,
-        behavior: 'smooth',
-      });
-    }
-    // 按钮左侧超出容器可视区 → 向左滚动刚好露出
-    else if (btnLeft - padding < containerLeft) {
-      container.scrollTo({
-        left: btnLeft - padding,
-        behavior: 'smooth',
-      });
-    }
-    // 完全可见 → 不滚动
+    container.scrollTo({
+      left: Math.max(0, Math.min(targetLeft, maxScrollLeft)),
+      behavior: 'smooth',
+    });
+  }, []);
+
+  const handleClick = (cat: string, index: number) => {
+    onChange(cat);
+    requestAnimationFrame(() => scrollToIndex(index));
   };
+
+  useEffect(() => {
+    const activeIndex = categories.findIndex(cat => cat === active);
+    if (activeIndex >= 0) {
+      requestAnimationFrame(() => scrollToIndex(activeIndex));
+    }
+  }, [active, categories, scrollToIndex]);
 
   return (
     <div
       ref={scrollRef}
-      className="flex gap-2 py-1"
+      className="no-scrollbar flex gap-2 overflow-x-auto px-4 py-1"
+      onPointerDown={(event) => event.stopPropagation()}
       style={{
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
         WebkitOverflowScrolling: 'touch',
-        paddingLeft: '1rem',
-        paddingRight: '1rem',
+        overscrollBehaviorX: 'contain',
+        scrollBehavior: 'smooth',
+        scrollPaddingInline: '1rem',
+        touchAction: 'pan-x',
       } as React.CSSProperties}
     >
       {categories.map((cat, index) => (
         <motion.button
+          type="button"
           key={cat}
           ref={(el) => { buttonRefs.current[index] = el; }}
           onClick={() => handleClick(cat, index)}
-          className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap flex-shrink-0 transition-colors ${
+          className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap flex-shrink-0 transition-colors duration-200 ${
             active === cat
               ? 'bg-primary text-primary-foreground'
               : 'bg-secondary text-muted-foreground'
