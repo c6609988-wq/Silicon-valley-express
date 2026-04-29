@@ -85,8 +85,6 @@ module.exports = async (req, res) => {
   let query = supabase
     .from('articles')
     .select('*', { count: 'exact' })
-    // 优先展示 is_visible=true 的内容（旧数据无此字段时也显示）
-    .or('is_visible.is.null,is_visible.eq.true')
     .order('published_at', { ascending: false })
     .range(offset, offset + l - 1);
 
@@ -113,7 +111,6 @@ module.exports = async (req, res) => {
     const { data: fallback } = await supabase
       .from('articles')
       .select('*')
-      .or('is_visible.is.null,is_visible.eq.true')
       .order('published_at', { ascending: false })
       .limit(50);
     let articles = (fallback || []).map(dbRowToArticle);
