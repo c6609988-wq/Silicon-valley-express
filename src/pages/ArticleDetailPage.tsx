@@ -62,12 +62,128 @@ function NumBadge({ n }: { n: number }) {
   );
 }
 
-// ── 解析 ai_analysis 文本（生产格式 v4：核心要点/深度解读/原文翻译）────
-function parseAiAnalysis(aiText: string) {
-  if (!aiText || aiText.length < 30) return null;
+// ══════════════════════════════════════════════════════════
+// 解析器 v5 — 兼容新旧两种 ai_analysis 格式
+//
+// 新格式（prompt v2，### 一/二/三/四 结构）：
+//   ### 一、摘要
+//   ### 二、核心内容提炼  → 事件行 + 说明：行 → 合并为一条 keyPoint
+//   ### 三、智能点评
+//   ### 四、原文内容       → 📎 中文翻译：... / 📎 原文：...
+//
+// 旧格式（prompt v1，无 ### 标题）：
+//   核心要点 / 深度解读 / 原文翻译
+// ══════════════════════════════════════════════════════════
 
-  const keypointsMatch  = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n\n?深度解读|\n\n?原文翻译|$)/);
-  const commentMatch    = aiText.match(/深度解读\s*\n([\s\S]*?)(?=\n\n?原文翻译|$)/);
+/** 判断是否为新格式（含 ### 一、摘要） */
+function isNewFormat(text: string): boolean {
+  return /###\s*[一二三四]/.test(text);
+}
+
+/** ── 新格式：短推文解析器 ──────────────────────────────────
+ *  提取 ### 二、核心内容提炼 中的"事件行 + 说明：行"，
+ *  合并为一条 keyPoint："事件行\n说明：..."
+ */
+function parseShortAnalysis(aiText: string) {
+  // ① 摘要
+  const summaryMatch = aiText.match(/###\s*一[、.]\s*摘要\s*\n([\s\S]*?)(?=\n###\s*[二三四]|$)/);
+  const aiOneliner   = summaryMatch?.[1]?.trim().replace(/\*\*/g, '') || '';
+
+  // ② 核心内容提炼 → 合并事件行 + 说明行
+  const pointsMatch  = aiText.match(/###\s*二[、.]\s*核心内容提炼\s*\n([\s\S]*?)(?=\n###\s*[三四]|$)/);
+  const keyPoints: string[] = [];
+  if (pointsMatch?.[1]) {
+    const lines = pointsMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].replace(/\*\*/g, '');
+      // 跳过纯说明行（以"说明："开头，前面没有事件行时孤立出现，直接跳过）
+      if (/^说明[：:]/.test(line)) { i++; continue; }
+      // 事件行：下一行可能是说明行
+      const nextLine = lines[i + 1]?.replace(/\*\*/g, '') || '';
+      if (/^说明[：:]/.test(nextLine)) {
+        // 合并：事件行 + 说明内容（去掉"说明："前缀）
+        const explanation = nextLine.replace(/^说明[：:]\s*/, '');
+        keyPoints.push(`${line}\n说明：${explanation}`);
+        i += 2;
+      } else {
+        keyPoints.push(line);
+        i++;
+      }
+    }
+  }
+
+  // ③ 智能点评
+  const commentMatch = aiText.match(/###\s*三[、.]\s*智能点评\s*\n([\s\S]*?)(?=\n###\s*四|$)/);
+  const aiComment    = commentMatch?.[1]?.trim().replace(/\*\*/g, '') || '';
+
+  // ④ 原文内容 → 提取中文翻译作为 chineseContent
+  const rawSection   = aiText.match(/###\s*四[、.]\s*原文内容\s*\n([\s\S]*?)$/)?.[1]?.trim() || '';
+  const cnMatch      = rawSection.match(/📎\s*中文翻译[：:]\s*([\s\S]*?)(?=\n📎\s*原文[：:]|$)/);
+  const chineseContent = cnMatch?.[1]?.trim().replace(/\/\//g, '\n\n') || rawSection;
+
+  if (!aiOneliner && !aiComment && keyPoints.length === 0) return null;
+
+  const keyPointChapters = keyPoints.length > 0
+    ? [{ id: '1', title: '核心内容提炼', content: '', keyPoints }]
+    : [];
+
+  return { aiOneliner, aiComment, chineseContent, keyPointChapters };
+}
+
+/** ── 新格式：长文章解析器 ─────────────────────────────────
+ *  ### 二、核心内容提炼 内按 #### N. 切章节，
+ *  每章节内按 **标题**\n内容 提取子要点
+ */
+function parseLongAnalysis(aiText: string) {
+  // ① 摘要
+  const summaryMatch = aiText.match(/###\s*一[、.]\s*摘要\s*\n([\s\S]*?)(?=\n###\s*[二三四]|$)/);
+  const aiOneliner   = summaryMatch?.[1]?.trim().replace(/\*\*/g, '') || '';
+
+  // ② 核心内容提炼 → 按 #### N. 切章节
+  const pointsBlock  = aiText.match(/###\s*二[、.]\s*核心内容提炼\s*\n([\s\S]*?)(?=\n###\s*[三四]|$)/)?.[1] || '';
+  const chapters: Array<{ id: string; title: string; content: string; keyPoints: string[] }> = [];
+
+  if (pointsBlock) {
+    // 按 #### 分割各章节
+    const chapterBlocks = pointsBlock.split(/\n(?=####\s)/);
+    chapterBlocks.forEach((block, idx) => {
+      const titleMatch = block.match(/^####\s*\d+[.、]?\s*(.+)/);
+      const title = titleMatch?.[1]?.replace(/\*\*/g, '').trim() || `要点 ${idx + 1}`;
+      // 从章节内容中提取 **子标题** + 正文 对
+      const subPoints: string[] = [];
+      const subBlocks = block.replace(/^####[^\n]+\n/, '').split(/\n(?=\*\*)/);
+      subBlocks.forEach(sub => {
+        const subTitle = sub.match(/^\*\*(.+?)\*\*/)?.[1]?.trim() || '';
+        const subBody  = sub.replace(/^\*\*.+?\*\*\n?/, '').trim().replace(/\*\*/g, '');
+        if (subTitle && subBody) subPoints.push(`${subTitle}：${subBody}`);
+        else if (subBody) subPoints.push(subBody);
+      });
+      if (subPoints.length > 0 || title) {
+        chapters.push({ id: String(idx + 1), title, content: '', keyPoints: subPoints });
+      }
+    });
+  }
+
+  // 没有 #### 章节时退回 parseShortAnalysis 逻辑
+  if (chapters.length === 0) return parseShortAnalysis(aiText);
+
+  // ③ 智能点评
+  const commentMatch = aiText.match(/###\s*三[、.]\s*智能点评\s*\n([\s\S]*?)(?=\n###\s*四|$)/);
+  const aiComment    = commentMatch?.[1]?.trim().replace(/\*\*/g, '') || '';
+
+  // ④ 原文内容
+  const rawSection     = aiText.match(/###\s*四[、.]\s*原文内容\s*\n([\s\S]*?)$/)?.[1]?.trim() || '';
+  const cnMatch        = rawSection.match(/📎\s*中文翻译[：:]\s*([\s\S]*?)(?=\n📎\s*原文[：:]|$)/);
+  const chineseContent = cnMatch?.[1]?.trim().replace(/\/\//g, '\n\n') || rawSection;
+
+  return { aiOneliner, aiComment, chineseContent, keyPointChapters: chapters };
+}
+
+/** ── 旧格式兜底解析器（核心要点/深度解读/原文翻译）─────── */
+function parseLegacyAnalysis(aiText: string) {
+  const keypointsMatch   = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n\n?深度解读|\n\n?原文翻译|$)/);
+  const commentMatch     = aiText.match(/深度解读\s*\n([\s\S]*?)(?=\n\n?原文翻译|$)/);
   const translationMatch = aiText.match(/原文翻译\s*\n([\s\S]*?)$/);
 
   if (!keypointsMatch && !commentMatch) return null;
@@ -77,7 +193,6 @@ function parseAiAnalysis(aiText: string) {
   const aiComment   = commentMatch?.[1]?.trim().replace(/\*\*/g, '') || '';
   const translationSection = translationMatch?.[1]?.trim() || '';
 
-  // 从原文翻译区块提取每条推文的中文翻译行，作为核心内容提炼要点
   const keyPointLines: string[] = [];
   if (translationSection) {
     translationSection.split(/\n---+\n?/).forEach(block => {
@@ -86,15 +201,20 @@ function parseAiAnalysis(aiText: string) {
     });
   }
 
-  const chineseContent = keyPointLines.length > 0
-    ? keyPointLines.join('\n\n')
-    : translationSection;
-
+  const chineseContent = keyPointLines.length > 0 ? keyPointLines.join('\n\n') : translationSection;
   const keyPointChapters = keyPointLines.length > 0
     ? [{ id: '1', title: '核心内容提炼', content: '', keyPoints: keyPointLines }]
     : [];
 
   return { aiOneliner, aiComment, chineseContent, keyPointChapters };
+}
+
+/** ── 统一入口：自动判断格式并分发 ──────────────────────── */
+function parseAiAnalysis(aiText: string, contentType?: string) {
+  if (!aiText || aiText.length < 30) return null;
+  if (!isNewFormat(aiText)) return parseLegacyAnalysis(aiText);
+  // 新格式：content_type='long' 用长文解析，其余用短推文解析
+  return contentType === 'long' ? parseLongAnalysis(aiText) : parseShortAnalysis(aiText);
 }
 
 // ── 主页面 ────────────────────────────────────────────────
@@ -121,7 +241,7 @@ const ArticleDetailPage = () => {
       .then(data => {
         const item = data.items?.[0];
         if (!item) throw new Error('文章未找到');
-        const parsed = parseAiAnalysis(item.ai_analysis || '');
+        const parsed = parseAiAnalysis(item.ai_analysis || '', item.content_type);
         const aiOneliner = parsed?.aiOneliner || '';
         const aiComment  = parsed?.aiComment  || '';
         // 中文展示内容：优先解析翻译段，其次 translated_content，最后原文
