@@ -168,9 +168,19 @@ function dbRowToArticle(item) {
   const aiComment = extractComment(aiText, raw);
   const bodyText = extractChineseContent(item, aiText);
 
+  // 标题：优先用 AI 摘要主干（主体+事件+结果）；DB 中文标题次之；英文 DB 标题被覆盖
+  const aiHeadline = (aiSummary && /[一-鿿]/.test(aiSummary))
+    ? aiSummary.replace(/[（(，,。！？；].*/s, '').trim().slice(0, 35)
+    : '';
+  const dbTitle = cleanText(item.title || raw.title || '');
+  const dbTitleIsChinese = /[一-鿿]/.test(dbTitle);
+  const finalTitle = (aiHeadline && aiHeadline.length >= 6)
+    ? aiHeadline
+    : (dbTitleIsChinese ? dbTitle : (cleanText(item.author_name || '') || dbTitle));
+
   return {
     id: item.external_id || String(item.id),
-    title: cleanText(item.title || raw.title || item.author_name || ''),
+    title: finalTitle,
     summary: aiSummary || bodyText.slice(0, 120) || '',
     content: bodyText,
     originalContent: cleanText(item.original_content || raw.originalContent || ''),

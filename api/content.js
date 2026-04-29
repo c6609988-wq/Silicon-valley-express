@@ -44,9 +44,19 @@ function dbRowToArticle(item) {
   const priority        = item.priority || 'medium';
   const qualityScore    = item.quality_score || raw.score || 0;
 
+  // 标题：优先用 AI 摘要主干（主体+事件+结果）；DB 中文标题次之；英文 DB 标题不直接显示
+  const aiHeadline = (aiOneliner && /[一-鿿]/.test(aiOneliner))
+    ? aiOneliner.replace(/[（(，,。！？；].*/s, '').trim().slice(0, 35)
+    : '';
+  const dbTitle = item.title || '';
+  const dbTitleIsChinese = /[一-鿿]/.test(dbTitle);
+  const finalTitle = (aiHeadline && aiHeadline.length >= 6)
+    ? aiHeadline
+    : (dbTitleIsChinese ? dbTitle : (item.author_name || dbTitle || ''));
+
   return {
     id:             item.external_id || item.id,
-    title:          item.title || item.author_name,
+    title:          finalTitle,
     summary:        aiOneliner || raw.summary || aiText.slice(0, 100) || '',
     content:        item.translated_content || aiText || '',
     originalContent: item.original_content || '',
