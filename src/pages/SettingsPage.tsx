@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Check, Clock3, Mail } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, Clock3, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MobileLayout from '@/components/layout/MobileLayout';
 import { Input } from '@/components/ui/input';
@@ -8,11 +8,160 @@ import { useToast } from '@/hooks/use-toast';
 
 type PushChannel = 'email' | 'feishu';
 
-const hours = ['06', '07', '08', '09', '10'];
-const minutes = ['00', '01', '02'];
+const hours = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'));
+const minutes = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
+const wheelItemHeight = 56;
 
 const isValidEmail = (value: string) => /.+@.+\..+/.test(value.trim());
 const isValidWebhook = (value: string) => value.trim().startsWith('https://open.feishu.cn/');
+
+interface TimeWheelProps {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const TimeWheel = ({ label, options, value, onChange }: TimeWheelProps) => {
+  const [dragOffset, setDragOffset] = useState(0);
+  const isDragging = useRef(false);
+  const dragStartY = useRef(0);
+  const dragOffsetRef = useRef(0);
+  const movedDuringDrag = useRef(false);
+  const activeIndex = Math.max(0, options.indexOf(value));
+
+  useEffect(() => {
+    if (!isDragging.current) setDragOffset(0);
+  }, [value]);
+
+  const selectIndex = (index: number) => {
+    const clampedIndex = Math.min(options.length - 1, Math.max(0, index));
+    const next = options[clampedIndex];
+    if (next && next !== value) onChange(next);
+  };
+
+  const finishDrag = () => {
+    const steps = Math.round(-dragOffsetRef.current / wheelItemHeight);
+    dragOffsetRef.current = 0;
+    setDragOffset(0);
+    selectIndex(activeIndex + steps);
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    selectIndex(activeIndex + Math.sign(event.deltaY));
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    isDragging.current = true;
+    movedDuringDrag.current = false;
+    dragStartY.current = event.clientY;
+    dragOffsetRef.current = 0;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!isDragging.current) return;
+    event.preventDefault();
+    const nextOffset = event.clientY - dragStartY.current;
+    movedDuringDrag.current = movedDuringDrag.current || Math.abs(nextOffset) > 4;
+    dragOffsetRef.current = nextOffset;
+    setDragOffset(nextOffset);
+  };
+
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    finishDrag();
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <button
+        type="button"
+        aria-label={`${label}减少`}
+        onClick={() => selectIndex(activeIndex - 1)}
+        className="flex h-7 w-20 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      >
+        <ChevronUp className="h-4 w-4" />
+      </button>
+
+      <div
+        role="listbox"
+        aria-label={label}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onWheel={handleWheel}
+        style={{
+          height: wheelItemHeight * 3,
+          width: '100%',
+          position: 'relative',
+          overflow: 'hidden',
+          overscrollBehavior: 'contain',
+          touchAction: 'none',
+          cursor: isDragging.current ? 'grabbing' : 'grab',
+          userSelect: 'none',
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 24%, black 76%, transparent 100%)',
+        }}
+      >
+        <div
+          style={{
+            transform: `translateY(${wheelItemHeight - activeIndex * wheelItemHeight + dragOffset}px)`,
+            transition: isDragging.current ? 'none' : 'transform 0.18s ease',
+          }}
+        >
+          {options.map((item, index) => {
+            const active = item === value;
+            return (
+              <button
+                key={item}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  if (movedDuringDrag.current) return;
+                  dragOffsetRef.current = 0;
+                  setDragOffset(0);
+                  selectIndex(index);
+                }}
+                style={{
+                  height: wheelItemHeight,
+                  width: '100%',
+                  borderRadius: 16,
+                  border: active ? '1px solid rgba(26,115,232,0.22)' : '1px solid transparent',
+                  background: active ? 'rgba(26,115,232,0.07)' : 'transparent',
+                  color: active ? '#111827' : '#A8B0BD',
+                  fontSize: active ? 30 : 24,
+                  fontWeight: active ? 650 : 500,
+                  lineHeight: 1,
+                  transition: 'background 0.16s, color 0.16s, font-size 0.16s',
+                }}
+              >
+                {item}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        aria-label={`${label}增加`}
+        onClick={() => selectIndex(activeIndex + 1)}
+        className="flex h-7 w-20 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      >
+        <ChevronDown className="h-4 w-4" />
+      </button>
+    </div>
+  );
+};
 
 const SettingsPage = () => {
   const navigate = useNavigate();
@@ -156,40 +305,10 @@ const SettingsPage = () => {
             <h2 className="text-base font-medium text-foreground">推送时间</h2>
           </div>
 
-          <div className="mx-auto grid max-w-[260px] grid-cols-[1fr_auto_1fr] items-center gap-4">
-            <div className="space-y-4 text-center">
-              {hours.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setHour(item)}
-                  className={`h-12 w-full rounded-2xl text-2xl font-semibold transition-colors ${
-                    hour === item
-                      ? 'border border-primary/20 bg-primary/5 text-foreground'
-                      : 'text-muted-foreground/45'
-                  }`}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
+          <div className="mx-auto grid max-w-[310px] grid-cols-[1fr_auto_1fr] items-center gap-4">
+            <TimeWheel label="选择小时" options={hours} value={hour} onChange={setHour} />
             <span className="pb-1 text-3xl font-bold text-foreground">:</span>
-            <div className="space-y-4 text-center">
-              {minutes.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setMinute(item)}
-                  className={`h-12 w-full rounded-2xl text-2xl font-semibold transition-colors ${
-                    minute === item
-                      ? 'border border-primary/20 bg-primary/5 text-foreground'
-                      : 'text-muted-foreground/45'
-                  }`}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
+            <TimeWheel label="选择分钟" options={minutes} value={minute} onChange={setMinute} />
           </div>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
