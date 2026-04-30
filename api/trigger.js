@@ -114,6 +114,84 @@ module.exports = async (req, res) => {
     }
   }
 
+  // ── youtube 模式：从 YouTube 频道抓取最新视频 + 字幕 + AI 分析 ─────────────
+  if (mode === 'youtube') {
+    try {
+      const log = [];
+      const requestedCount = Math.max(1, Math.min(parseInt(req.query.count) || 1, 5));
+      const ytSources = presetSources.filter(s => s.enabled && s.platform === 'youtube');
+      const prompts = await getPrompts();
+      let saved = 0;
+      const errors = [];
+
+      for (const source of ytSources) {
+        if (saved >= requestedCount) break;
+        try {
+          const videos = await tikhub.getYouTubeVideos(source.url, 3);
+          log.push(`${source.name} (${source.url}): 返回 ${videos.length} 个视频`);
+          if (!videos.length) continue;
+
+          const video = videos[0];
+          const videoId = video.video_id || video.videoId || video.id;
+          const title = video.title || video.video_title || '';
+          if (!videoId) { log.push(`  ⚠ 无 video_id，跳过`); continue; }
+
+          const transcript = await tikhub.getVideoTranscript(videoId, 'en');
+          log.push(`  字幕长度: ${transcript.length}`);
+
+          const todayStr = bjNow.toISOString().slice(0, 10);
+          const aiInput = `频道：${source.name}\n视频标题：${title}\n日期：${todayStr}\n字幕：\n\n${transcript.slice(0, 8000)}`;
+          let analysis = '';
+          let translatedTitle = title;
+          try {
+            translatedTitle = await deepseek.translateToZh(title);
+          } catch (e) { log.push(`  标题翻译失败: ${e.message}`); }
+          try {
+            analysis = await deepseek.analyzeContent(prompts.LONG_CONTENT_PROMPT || prompts.SHORT_CONTENT_PROMPT, aiInput);
+            log.push(`  AI 分析: ${analysis.length} 字`);
+          } catch (e) {
+            log.push(`  AI 分析失败: ${e.message}`);
+            errors.push(e.message);
+          }
+
+          const pubAt = video.published_at || video.publishedAt || new Date();
+          const { error: uErr } = await supabase.from('articles').upsert({
+            source_id: source.id,
+            platform: 'youtube',
+            external_id: String(videoId),
+            author_name: source.name,
+            author_handle: source.handle || source.url,
+            title: translatedTitle || title,
+            original_content: transcript || title,
+            translated_content: '',
+            ai_analysis: analysis,
+            content_type: 'long',
+            link: `https://youtube.com/watch?v=${videoId}`,
+            published_at: new Date(pubAt),
+            fetched_at: new Date(),
+            raw_data: { ...video, score: source.score || 80 },
+          }, { onConflict: 'external_id' });
+
+          if (uErr) {
+            log.push(`  ✗ 入库失败: ${uErr.message}`);
+            errors.push(uErr.message);
+          } else {
+            log.push(`  ✓ 入库成功: ${translatedTitle}`);
+            saved++;
+          }
+        } catch (err) {
+          log.push(`${source.name} 出错: ${err.message}`);
+          errors.push(err.message);
+        }
+        await sleep(1500);
+      }
+
+      return res.json({ mode: 'youtube', success: true, saved, requested: requestedCount, bjTime, log, errors });
+    } catch (err) {
+      return res.status(500).json({ mode: 'youtube', success: false, error: err.message });
+    }
+  }
+
   // ── simple 模式：跳过 AI，直接把推文写入数据库 ─────────────────────────────
   if (mode === 'simple') {
     try {
