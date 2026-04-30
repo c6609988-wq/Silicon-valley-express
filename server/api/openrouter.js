@@ -2,15 +2,18 @@
 const axios = require('axios');
 
 const client = axios.create({
-  baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1',
+  baseURL: (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1').trim(),
   headers: {
-    'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+    'Authorization': `Bearer ${(process.env.DEEPSEEK_API_KEY || '').trim()}`,
     'Content-Type': 'application/json',
   },
   timeout: 60000
 });
 
-const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+// 兜底用 v4-flash（deepseek-chat 已废弃）
+const RAW_MODEL = (process.env.DEEPSEEK_MODEL || '').trim();
+const DEPRECATED_MODELS = new Set(['deepseek-chat', 'deepseek-coder']);
+const MODEL = (RAW_MODEL && !DEPRECATED_MODELS.has(RAW_MODEL)) ? RAW_MODEL : 'deepseek-v4-flash';
 
 async function callAI(systemPrompt, userContent) {
   const response = await client.post('/chat/completions', {
