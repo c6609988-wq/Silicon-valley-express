@@ -17,6 +17,7 @@ const CONTENT_TYPE_LABELS = {
 const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1, discard: 0 };
 
 const SECTION_LABELS = [
+  '摘要',
   '核心内容提炼',
   '核心要点',
   '智能点评',
@@ -26,6 +27,12 @@ const SECTION_LABELS = [
   '原文翻译',
   '中文翻译',
 ];
+
+/** 提取价值等级（[VALUE: high|medium|low|skip]），默认 medium */
+function extractValueLevel(aiText = '') {
+  const m = String(aiText || '').match(/^\s*\[VALUE:\s*(high|medium|low|skip)\]/i);
+  return m ? m[1].toLowerCase() : 'medium';
+}
 
 function cleanText(value = '') {
   return String(value)
@@ -124,6 +131,13 @@ function extractOneliner(aiText = '', raw = {}) {
   if (raw.aiOneliner) return cleanText(raw.aiOneliner);
   if (raw.summary) return cleanText(raw.summary);
 
+  // v5 优先：从「摘要」段取第一行
+  const summary = findSection(aiText, ['摘要']);
+  if (summary) {
+    const lines = splitMeaningfulLines(summary).filter(l => !/^写法要求|^- /.test(l));
+    if (lines[0]) return cleanText(lines[0].replace(/^[-*\d.、\s]+/, '').replace(/^[\[【]|[\]】]$/g, ''));
+  }
+
   const core = findSection(aiText, ['核心内容提炼', '核心要点']);
   const firstLine = splitMeaningfulLines(core)[0] || splitMeaningfulLines(aiText)[0] || '';
   return cleanText(firstLine.replace(/^[-*\d.、\s]+/, ''));
@@ -156,9 +170,13 @@ function platformIcon(platform = '') {
   return 'X';
 }
 
+function stripValueTag(text = '') {
+  return String(text || '').replace(/^\s*\[VALUE:\s*(high|medium|low|skip)\][^\n]*\n*/i, '').trim();
+}
+
 function dbRowToArticle(item) {
   const raw = item.raw_data || {};
-  const aiText = item.ai_analysis || '';
+  const aiText = stripValueTag(item.ai_analysis || '');
   const platform = normalizePlatform(item.platform);
   const contentCategory = item.content_category || raw.content_type || '';
   const priority = item.priority || 'medium';
@@ -223,7 +241,13 @@ router.get('/', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   if (format === 'articles') {
-    const articles = (data || [])
+    // 过滤掉 [VALUE: low/skip] 标记的低价值文章
+    const visibleData = (data || []).filter(item => {
+      const level = extractValueLevel(item.ai_analysis || '');
+      return level !== 'low' && level !== 'skip';
+    });
+
+    const articles = visibleData
       .map(dbRowToArticle)
       .sort((a, b) =>
         ((b.priorityWeight ?? 1) - (a.priorityWeight ?? 1)) ||

@@ -3,20 +3,38 @@
 // ?source_id=xxx    → 按来源过滤（供详情页回退使用）
 const { supabase } = require('../lib/supabase');
 
-/** 从 ai_analysis 提取"核心要点"一句话（去掉标题行） */
+/** 提取价值等级（[VALUE: high|medium|low|skip]），默认 medium */
+function extractValueLevel(aiText = '') {
+  const m = aiText.match(/^\s*\[VALUE:\s*(high|medium|low|skip)\]/i);
+  return m ? m[1].toLowerCase() : 'medium';
+}
+
+/** 从 ai_analysis 提取摘要一句话（兼容 v5 / v4 / 生产格式） */
 function extractOneliner(aiText = '') {
-  const m = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n\n?深度解读|\n\n?原文翻译|$)/);
+  // v5 格式：一、摘要
+  const v5 = aiText.match(/一[、.]\s*摘要\s*\n([\s\S]*?)(?=\n\s*二[、.]|\n\s*###|$)/);
+  if (v5) {
+    const lines = v5[1].trim().split('\n').filter(l => l.trim() && !/^写法要求|^- /.test(l.trim()));
+    if (lines[0]) return lines[0].trim().replace(/\*\*/g, '').replace(/^[\[【]|[\]】]$/g, '');
+  }
+  // 生产格式：核心要点
+  const m = aiText.match(/核心要点\s*\n([\s\S]*?)(?=\n\n?深度解读|\n\n?智能点评|\n\n?原文翻译|\n\n?原文内容|$)/);
   if (m) return m[1].trim().split('\n')[0].trim().replace(/\*\*/g, '');
-  // 旧格式兜底：去掉标题行取第一句
+  // 兜底：去掉标题行取第一句
   return aiText
-    .replace(/核心要点|深度解读|原文翻译|#{1,3}\s.+/g, '')
+    .replace(/^\s*\[VALUE:[^\]]+\][^\n]*/g, '')
+    .replace(/核心要点|深度解读|智能点评|原文翻译|原文内容|#{1,3}\s.+/g, '')
     .trim().split('\n').find(l => l.trim().length > 5) || '';
 }
 
-/** 从 ai_analysis 提取"深度解读"段 */
+/** 从 ai_analysis 提取智能点评/深度解读段 */
 function extractComment(aiText = '') {
-  const m = aiText.match(/深度解读\s*\n([\s\S]*?)(?=\n\n?原文翻译|$)/);
-  return m ? m[1].trim().replace(/\*\*/g, '') : '';
+  // v5 格式：三、智能点评
+  const v5 = aiText.match(/三[、.]\s*智能点评\s*\n([\s\S]*?)(?=\n\s*四[、.]|\n\s*###|$)/);
+  if (v5) return v5[1].trim().replace(/\*\*/g, '');
+  // 生产格式：智能点评 / 深度解读
+  const m = aiText.match(/(智能点评|深度解读)\s*\n([\s\S]*?)(?=\n\n?原文翻译|\n\n?原文内容|$)/);
+  return m ? m[2].trim().replace(/\*\*/g, '') : '';
 }
 
 /** content_type → 展示标签映射 */
@@ -34,9 +52,13 @@ const CONTENT_TYPE_LABELS = {
 /** priority 数字权重（用于前端排序） */
 const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1, discard: 0 };
 
+function stripValueTag(text = '') {
+  return text.replace(/^\s*\[VALUE:\s*(high|medium|low|skip)\][^\n]*\n*/i, '').trim();
+}
+
 function dbRowToArticle(item) {
   const raw        = item.raw_data || {};
-  const aiText     = item.ai_analysis || '';
+  const aiText     = stripValueTag(item.ai_analysis || '');
   const aiOneliner = raw.aiOneliner || extractOneliner(aiText);
   const aiComment  = raw.aiComment  || extractComment(aiText);
 
@@ -104,11 +126,17 @@ module.exports = async (req, res) => {
   const { data, count, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
+  // 过滤掉 [VALUE: low/skip] 标记的低价值文章（不展示在前端）
+  const visibleData = (data || []).filter(item => {
+    const level = extractValueLevel(item.ai_analysis || '');
+    return level !== 'low' && level !== 'skip';
+  });
+
   // format=articles → 返回前端格式（供首页使用）
   // 策略：优先今天，无数据则兜底返回最近 50 条历史
   if (format === 'articles') {
-    if (data && data.length > 0) {
-      let articles = data.map(dbRowToArticle);
+    if (visibleData.length > 0) {
+      let articles = visibleData.map(dbRowToArticle);
       // 按优先级降序 → 质量分降序 → 时间降序
       articles.sort((a, b) =>
         (b.priorityWeight - a.priorityWeight) ||
@@ -123,7 +151,11 @@ module.exports = async (req, res) => {
       .select('*')
       .order('published_at', { ascending: false })
       .limit(50);
-    let articles = (fallback || []).map(dbRowToArticle);
+    const visibleFallback = (fallback || []).filter(item => {
+      const level = extractValueLevel(item.ai_analysis || '');
+      return level !== 'low' && level !== 'skip';
+    });
+    let articles = visibleFallback.map(dbRowToArticle);
     articles.sort((a, b) =>
       (b.priorityWeight - a.priorityWeight) ||
       (b.score - a.score) ||
